@@ -770,18 +770,3 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}
           path: out/*
-
-      - name: Publish to frostyard repo
-        uses: frostyard/repogen/.github/actions/publish-to-r2@main
-        with:
-          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
-          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}
-          r2-bucket: frostyardrepo
-          purge-cache: "true"
-          cloudflare-zone: ${{ secrets.CLOUDFLARE_ZONE }}
-          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          packages-dir: ./out
-          package-type: deb # or sysext
-          base-url: https://repository.frostyard.org # required for sysext
