@@ -84,6 +84,7 @@ jobs:
             gettext \
             git \
             iproute2 \
+            jq \
             libacl1-dev \
             libaio-dev \
             libapparmor-dev \
