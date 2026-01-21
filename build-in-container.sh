@@ -1,0 +1,688 @@
+#!/bin/bash
+# build-in-container.sh
+#
+# Creates an Incus container running Debian Trixie (amd64) and builds
+# the Incus packages inside it.
+#
+# Usage: ./build-in-container.sh [container-name]
+#
+# The built .deb packages will be copied to ./out/ when complete.
+
+set -e
+
+CONTAINER_NAME="${1:-incus-build}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "=== Incus Build Container Setup ==="
+echo "Container: ${CONTAINER_NAME}"
+echo "Source: ${SCRIPT_DIR}"
+echo ""
+
+# Check if incus is available
+if ! command -v incus &> /dev/null; then
+    echo "ERROR: incus command not found. Please install Incus first."
+    exit 1
+fi
+
+# Delete existing container if it exists
+if incus info "${CONTAINER_NAME}" &> /dev/null; then
+    echo "Deleting existing container ${CONTAINER_NAME}..."
+    incus delete -f "${CONTAINER_NAME}"
+fi
+
+# Create the container
+echo "Creating Debian Trixie container..."
+incus launch images:debian/trixie "${CONTAINER_NAME}" -c security.nesting=true
+
+# Wait for container to be ready
+echo "Waiting for container to be ready..."
+sleep 5
+while ! incus exec "${CONTAINER_NAME}" -- test -e /var/lib/dpkg/lock-frontend 2>/dev/null; do
+    sleep 1
+done
+# Wait for apt to be available
+while incus exec "${CONTAINER_NAME}" -- fuser /var/lib/dpkg/lock-frontend 2>/dev/null; do
+    sleep 1
+done
+
+# Push the repository into the container
+echo "Pushing source repository to container..."
+incus file push -r "${SCRIPT_DIR}" "${CONTAINER_NAME}/root/" --quiet
+
+REPO_NAME="$(basename "${SCRIPT_DIR}")"
+
+# Create the build script to run inside the container
+cat << 'BUILDSCRIPT' | incus exec "${CONTAINER_NAME}" -- bash -s "${REPO_NAME}"
+#!/bin/bash
+set -ex
+
+REPO_NAME="$1"
+REPO="/root/${REPO_NAME}"
+cd "${REPO}"
+
+# Environment variables
+export OS_ARCH="amd64"
+export OS_NAME="debian-13"
+export HOME="/root/"
+export PKG_CONFIG_PATH="/usr/incus/lib/pkgconfig/"
+export CGO_LDFLAGS="-L/usr/incus/lib/"
+export CGO_CFLAGS="-I/usr/incus/include/"
+export LD_LIBRARY_PATH="/usr/incus/lib/"
+export CPATH="/usr/incus/include/"
+export PATH="/usr/incus/bin:/root/.cargo/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
+
+# Version tags
+DISTROBUILDER_TAG="distrobuilder-3.2"
+INCUS_TAG="v6.20.0"
+INCUS_UI_CANONICAL_TAG="incus-0.19.0"
+LXCFS_TAG="v6.0.5"
+LXC_TAG="v6.0.5"
+
+COWSQL_TAG="v1.15.9"
+CRIU_TAG="v4.2"
+EDK2_TAG="edk2-stable202511"
+GOLANG_TAG="go1.25.5"
+LEGO_TAG="v4.31.0"
+LIBTPMS_TAG="v0.10.2"
+LIBURING_TAG="liburing-2.13"
+MINIO_MC_TAG="RELEASE.2025-08-13T08-35-41Z"
+MINIO_TAG="RELEASE.2025-10-15T17-29-55Z"
+NASM_TAG="nasm-2.16.03"
+NVIDIA_CONTAINER_TAG="v1.18.1"
+QEMU_TAG="v10.2.0"
+RAFT_TAG="v0.22.1"
+SEABIOS_TAG="rel-1.17.0"
+SKOPEO_TAG="v1.21.0"
+SWTPM_TAG="v0.10.1"
+TRUENAS_INCUS_CTL_TAG="v0.7.3"
+VIRTIOFSD_TAG="v1.13.3"
+
+
+
+echo "=== Installing dependencies ==="
+apt-get update
+apt-get install --no-install-recommends --yes \
+    acpica-tools \
+    asciidoc \
+    autoconf \
+    automake \
+    bison \
+    bmake \
+    build-essential \
+    curl \
+    debhelper \
+    devscripts \
+    dosfstools \
+    expect \
+    flex \
+    gawk \
+    gettext \
+    git \
+    iproute2 \
+    libacl1-dev \
+    libaio-dev \
+    libapparmor-dev \
+    libbtrfs-dev \
+    libcap-dev \
+    libcap-ng-dev \
+    libdbus-1-dev \
+    libdevmapper-dev \
+    libelf-dev \
+    libfuse3-dev \
+    libglib2.0-dev \
+    libgnutls28-dev \
+    libgpgme-dev \
+    libjson-glib-dev \
+    libnet1-dev \
+    libnl-3-dev \
+    libnuma-dev \
+    libpam0g-dev \
+    libpixman-1-dev \
+    libpng-dev \
+    libprotobuf-c-dev \
+    libprotobuf-dev \
+    librbd-dev \
+    libseccomp-dev \
+    libselinux1-dev \
+    libspice-server-dev \
+    libsqlite3-dev \
+    libssl-dev \
+    libsystemd-dev \
+    libtirpc-dev \
+    libtool \
+    libudev-dev \
+    libusb-1.0-0-dev \
+    libusbredirhost-dev \
+    libuv1-dev \
+    lsb-release \
+    mtools \
+    ninja-build \
+    pkg-config \
+    protobuf-c-compiler \
+    protobuf-compiler \
+    python3-cryptography \
+    python3-jinja2 \
+    python3-pexpect \
+    python3-pip \
+    python3-setuptools \
+    python3-venv \
+    rsync \
+    socat \
+    uuid-dev \
+    xmlto \
+    xorriso
+
+echo "=== Configuring git ==="
+git config --global --add advice.detachedHead false
+git config --global user.email "noreply@localhost"
+git config --global user.name "Incus build"
+
+apt-get install --no-install-recommends --yes systemd-dev || true
+
+pip3 install meson --break-system-packages || pip3 install meson
+pip3 install tomli --break-system-packages || pip3 install tomli
+
+echo "=== Installing Go ==="
+curl -sL "https://go.dev/dl/${GOLANG_TAG}.linux-${OS_ARCH}.tar.gz" | tar -C /usr/local/ -zx
+go version
+
+echo "=== Installing Rust ==="
+curl -sL https://sh.rustup.rs -o /tmp/install-rust.sh
+bash /tmp/install-rust.sh -y
+source /root/.cargo/env
+
+echo "=== Installing Node ==="
+NODE_ARCH=x64
+mkdir -p /usr/local/node/
+curl -sL "https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-${NODE_ARCH}.tar.xz" | tar -C /usr/local/node/ -Jx --strip-components=1
+
+echo "=== Setting up build environment ==="
+mkdir -p /build/
+mkdir -p \
+    /usr/incus/bin/ \
+    /usr/incus/include/ \
+    /usr/incus/lib/ \
+    /usr/incus/lib/systemd \
+    /usr/incus/share/
+
+echo "=== Cloning source repositories ==="
+git clone https://github.com/lxc/distrobuilder /build/distrobuilder --depth 1 -b "${DISTROBUILDER_TAG}"
+git clone https://github.com/lxc/lxc /build/lxc -b "${LXC_TAG}"
+git clone https://github.com/lxc/lxcfs /build/lxcfs --depth 1 -b "${LXCFS_TAG}"
+git clone https://github.com/lxc/incus /build/incus -b "${INCUS_TAG}"
+git clone https://github.com/zabbly/incus-ui-canonical /build/incus-ui-canonical --depth 1 -b "${INCUS_UI_CANONICAL_TAG}"
+
+git clone https://github.com/axboe/liburing /build/liburing --depth 1 -b "${LIBURING_TAG}"
+git clone https://github.com/checkpoint-restore/criu /build/criu --depth 1 -b "${CRIU_TAG}"
+git clone https://github.com/containers/skopeo /build/skopeo --depth 1 -b "${SKOPEO_TAG}"
+git clone https://github.com/cowsql/cowsql /build/cowsql --depth 1 -b "${COWSQL_TAG}"
+git clone https://github.com/cowsql/raft /build/raft --depth 1 -b "${RAFT_TAG}"
+git clone https://github.com/go-acme/lego /build/lego --depth 1 -b "${LEGO_TAG}"
+git clone https://github.com/minio/mc /build/mc --depth 1 -b "${MINIO_MC_TAG}"
+git clone https://github.com/minio/minio /build/minio --depth 1 -b "${MINIO_TAG}"
+git clone https://github.com/NVIDIA/libnvidia-container /build/libnvidia-container --depth 1 -b "${NVIDIA_CONTAINER_TAG}"
+git clone https://github.com/stefanberger/libtpms /build/libtpms --depth 1 -b "${LIBTPMS_TAG}"
+git clone https://github.com/stefanberger/swtpm /build/swtpm --depth 1 -b "${SWTPM_TAG}"
+git clone https://github.com/tianocore/edk2 /build/edk2 --recurse-submodules --shallow-submodules --depth 1 -b "${EDK2_TAG}"
+git clone https://github.com/truenas/truenas_incus_ctl /build/truenas_incus_ctl --depth 1 -b "${TRUENAS_INCUS_CTL_TAG}"
+git clone https://gitlab.com/qemu-project/qemu /build/qemu --depth 1 -b "${QEMU_TAG}"
+git clone https://gitlab.com/qemu-project/seabios /build/seabios --depth 1 -b "${SEABIOS_TAG}"
+git clone https://gitlab.com/virtio-fs/virtiofsd /build/virtiofsd --depth 1 -b "${VIRTIOFSD_TAG}"
+
+mkdir /build/nasm/
+curl -sL "https://www.nasm.us/pub/nasm/releasebuilds/$(echo ${NASM_TAG} | cut -d- -f2)/${NASM_TAG}.tar.gz" --resolve www.nasm.us:443:198.137.202.136 | tar -C /build/nasm/ -zx --strip-components=1
+
+echo "=== Building liburing ==="
+cd /build/liburing
+./configure --prefix=/usr/incus
+make
+mkdir -p /build/target/liburing/
+DESTDIR=/build/target/liburing make install
+rsync -a /build/target/liburing/usr/incus/include/* /usr/incus/include/
+rsync -a /build/target/liburing/usr/incus/lib/* /usr/incus/lib/
+
+echo "=== Building raft ==="
+cd /build/raft
+autoreconf -i
+./configure --prefix=/usr/incus
+make
+mkdir -p /build/target/raft/
+DESTDIR=/build/target/raft/ make install
+rsync -a /build/target/raft/usr/incus/include/ /usr/incus/include/
+rsync -a /build/target/raft/usr/incus/lib/ /usr/incus/lib/
+
+echo "=== Building cowsql ==="
+cd /build/cowsql
+autoreconf -i
+./configure --prefix=/usr/incus
+make
+mkdir -p /build/target/cowsql/
+DESTDIR=/build/target/cowsql/ make install
+rsync -a /build/target/cowsql/usr/incus/include/ /usr/incus/include/
+rsync -a /build/target/cowsql/usr/incus/lib/ /usr/incus/lib/
+
+echo "=== Building LXC ==="
+cd /build/lxc
+meson setup build \
+        --prefix=/usr/incus \
+        --libdir=/usr/incus/lib \
+        -Dexamples=false \
+        -Dman=false \
+        -Dtools=false \
+        -Dtests=false \
+        -Dmemfd-rexec=false \
+        -Dapparmor=true \
+        -Dseccomp=true \
+        -Dselinux=true \
+        -Dcapabilities=true \
+        -Dio-uring-event-loop=false
+meson compile -C build
+mkdir -p /build/target/lxc/
+DESTDIR=/build/target/lxc/ meson install -C build
+rsync -a /build/target/lxc/usr/incus/include/ /usr/incus/include/
+rsync -a /build/target/lxc/usr/incus/lib/ /usr/incus/lib/
+mkdir -p /usr/incus/share/lxc/config/common.conf.d/
+mkdir -p /usr/incus/share/lxc/hooks/
+cp /build/target/lxc/usr/incus/share/lxc/hooks/nvidia /usr/incus/share/lxc/hooks/
+
+echo "=== Building LXCFS ==="
+cd /build/lxcfs
+meson setup build \
+        --prefix=/usr/incus \
+        --libdir=/usr/incus/lib \
+        -Ddocs=false \
+        -Dtests=false
+meson compile -C build
+mkdir -p /build/target/lxcfs/
+DESTDIR=/build/target/lxcfs/ meson install -C build
+rsync -a /build/target/lxcfs/usr/incus/bin/ /usr/incus/bin/
+rsync -a /build/target/lxcfs/usr/incus/share/ /usr/incus/share/
+rsync -a /build/target/lxcfs/usr/incus/lib/ /usr/incus/lib/
+sed -i "s#/var/lib/lxcfs#/var/lib/incus-lxcfs#g" /usr/incus/share/lxcfs/lxc.mount.hook
+patch -p1 /usr/incus/share/lxcfs/lxc.mount.hook < "${REPO}/patches/lxcfs-0001-hook.patch"
+
+echo "=== Building Incus ==="
+cd /build/incus
+git cherry-pick 0b0311794c2750b50e9a0aa598143f547ee5653e  # doc/openfga: Improve required config keys
+git cherry-pick eafa7db765970d7f09c20474781efed3c63f5446  # incusd/network/ovn: Drop now obsolete DNS check
+git cherry-pick 539860ce96195859ffc5d477a701c4d7ce967669  # incusd/storage/truenas: fix SetVolumeQuota issue when growing FS volumes
+git cherry-pick eb0b2f5d9b35ecf90d09d63854e80ea8602744a7  # cmd/incus-user: Don't reset setup if user has access
+git cherry-pick f95e2af5b76c91caa20c2ecef85df9ff6074d70e  # incusd/network/physical: Allow parent re-use for bridges
+git cherry-pick 969f32300002fd980992e3b62bedf398bdf7dbe6  # incusd/network/physical: Allow vlan.tagged
+git cherry-pick b72643a540172fdb69b97b82dd60740ac06ad890  # incusd/device: Add vlan.tagged to physical NICs
+git cherry-pick add134c50d1ab69af063f8c0af4178129f09d51e  # incusd/device/nic_physical: Fix internal bridge handling
+git cherry-pick 110a5235313c8b415d12aa2d72ece95e70bd574f  # doc/network_ovn: Add note about advanced external_interfaces syntax
+git cherry-pick 58e7df140e1af36dc6d30abc8578b05889be813b  # incusd/instance/drivers: Add size parameter to UpdateBlockSize method
+git cherry-pick 06309e0d5fdbc265d7e9a226f773c25d624f654d  # incusd/storage/drivers: Export roundAbove function
+git cherry-pick 62b535b9c03f9b21c625bd56369a235fa528afbd  # incusd/storage/drivers: Add Qcow2Resize and export isQcow2Block function
+git cherry-pick ef90f5de6a14ca4ac4eb4e8a3d2929128d84d2e4  # incusd/storage: Add support for resizing qcow2 volumes
+git cherry-pick 27870526d1cb69d50b443c8b89187d9a16a30ea7  # Added a few more environment variables. PATHEXT and COMPUTERNAME were needed for 'shutdown.exe'. Meanwhile, I've connected as SYSTEM with PsExec to show the environment variables by default and added them.
+git cherry-pick bef2fc76a6f9c070cc07e068c7dd3a205884e3d1  # incusd/instance/drivers: Fix adding disk with a device name longer than 31 bytes
+git cherry-pick fe9c020eea99b05ed3eee2a5c50ed124e15df14a  # incusd/instance/drivers: Add tests for hashName
+
+go build -o "/usr/incus/bin/fuidshift" github.com/lxc/incus/v6/cmd/fuidshift
+go build -o "/usr/incus/bin/incus" github.com/lxc/incus/v6/cmd/incus
+go build -o "/usr/incus/bin/incus-benchmark" github.com/lxc/incus/v6/cmd/incus-benchmark
+go build -o "/usr/incus/bin/incus-migrate" github.com/lxc/incus/v6/cmd/incus-migrate
+go build -o "/usr/incus/bin/incus-simplestreams" github.com/lxc/incus/v6/cmd/incus-simplestreams
+go build -o "/usr/incus/bin/incus-user" github.com/lxc/incus/v6/cmd/incus-user
+go build -o "/usr/incus/bin/incusd" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/incusd
+go build -o "/usr/incus/bin/lxc-to-incus" github.com/lxc/incus/v6/cmd/lxc-to-incus
+go build -o "/usr/incus/bin/lxd-to-incus" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/lxd-to-incus
+
+mkdir -p /usr/incus/agent
+GOARCH=amd64 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+GOARCH=386 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+GOARCH=amd64 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+GOARCH=386 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+GOARCH=amd64 GOOS=darwin CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.macos.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+
+make build-mo
+mkdir -p /usr/incus/share/locale
+cp po/*.mo /usr/incus/share/locale/
+
+# make doc
+# cp -R doc/html /usr/incus/doc
+
+mkdir -p /usr/incus/share/completions/
+/usr/incus/bin/incus completion bash > /usr/incus/share/completions/bash
+/usr/incus/bin/incus completion fish > /usr/incus/share/completions/fish
+/usr/incus/bin/incus completion zsh > /usr/incus/share/completions/zsh
+
+echo "=== Building UI (canonical) ==="
+cd /build/incus-ui-canonical
+find -type f -name "*.ts" -o -name "*.tsx" -o -name "*.scss" | xargs sed -i -f "${REPO}/patches/ui-canonical-renames.sed"
+npm install yarn --global
+yarn install
+yarn build
+mkdir -p /usr/incus/ui-canonical/
+rsync -a /build/incus-ui-canonical/build/ui/ /usr/incus/ui-canonical/
+
+echo "=== Building Distrobuilder ==="
+cd /build/distrobuilder
+go build -o "/usr/incus/bin/distrobuilder" github.com/lxc/distrobuilder/distrobuilder
+
+echo "=== Building CRIU ==="
+cd /build/criu
+make WERROR=0
+cp criu/criu /usr/incus/bin/
+
+echo "=== Building libnvidia-container ==="
+cd /build/libnvidia-container
+patch -p1 < "${REPO}/patches/nvidia-0001-Fix-for-22.04-build.patch"
+patch -p1 < "${REPO}/patches/nvidia-0002-pre-load-libdl.patch"
+make prefix=/
+mkdir /build/target/libnvidia-container
+DESTDIR=/build/target/libnvidia-container make install prefix=/
+rsync -a /build/target/libnvidia-container/bin/ /usr/incus/bin/
+rsync -a /build/target/libnvidia-container/include/ /usr/incus/include/
+rsync -a /build/target/libnvidia-container/lib/ /usr/incus/lib/
+
+echo "=== Building minio ==="
+cd /build/minio
+make build
+cp minio /usr/incus/bin/
+
+echo "=== Building minio client ==="
+cd /build/mc
+make build
+cp mc /usr/incus/bin/
+
+echo "=== Building seabios ==="
+cd /build/seabios
+make clean distclean
+echo "CONFIG_QEMU=y" > .config
+echo "CONFIG_QEMU_HARDWARE=y" >> .config
+echo "CONFIG_BOOTSPLASH=n" >> .config
+echo "CONFIG_ROM_SIZE=256" >> .config
+echo "CONFIG_XEN=n" >> .config
+echo "CONFIG_PVSCSI=n" >> .config
+echo "CONFIG_ESP_SCSI=n" >> .config
+echo "CONFIG_LSI_SCSI=n" >> .config
+echo "CONFIG_MEGASAS=n" >> .config
+echo "CONFIG_MPT_SCSI=n" >> .config
+echo "CONFIG_FLOPPY=n" >> .config
+echo "CONFIG_FLASH_FLOPPY=n" >> .config
+make oldnoconfig V=1
+make V=1 PYTHON=python3
+mkdir -p /usr/incus/share/qemu/
+cp out/bios.bin /usr/incus/share/qemu/seabios.bin
+
+echo "=== Building nasm ==="
+cd /build/nasm
+patch -p1 < "${REPO}/patches/nasm-0000-disable-manpages.patch"
+./configure --prefix=/usr/incus
+make
+mkdir -p /build/target/nasm/
+DESTDIR=/build/target/nasm make install
+rsync -a /build/target/nasm/usr/incus/bin/ /usr/incus/bin/
+
+echo "=== Building EDK2 ==="
+cd /build/edk2
+patch -p1 < "${REPO}/patches/edk2-0001-force-DUID-LLT.patch"
+cp "${REPO}/patches/edk2-0002-logo.bmp" MdeModulePkg/Logo/Logo.bmp
+patch -p1 < "${REPO}/patches/edk2-0003-boot-delay.patch"
+patch -p1 < "${REPO}/patches/edk2-0004-gcc-errors.patch"
+patch -p1 < "${REPO}/patches/edk2-0005-Revert-ArmVirtPkg-make-EFI_LOADER_DATA-non-executabl.patch"
+patch -p1 < "${REPO}/patches/edk2-0006-disable-EFI-memory-attributes-protocol.patch"
+patch -p1 < "${REPO}/patches/edk2-0007-OvmfPkg-X64-add-opt-org-tianocore-UninstallMemAttrProtocol-support.patch"
+patch -p1 < "${REPO}/patches/edk2-0008-Disable-virtio-keyboard.patch"
+patch -p1 < "${REPO}/patches/edk2-0009-disable-UEFI-shell-under-SecureBoot.patch"
+
+EDK2_ARCH="X64"
+EDK2_PKG="OvmfPkg/OvmfPkgX64.dsc"
+EDK2_FV_CODE="OVMF_CODE"
+EDK2_FV_VARS="OVMF_VARS"
+
+build_edk2() {
+    TARGET_CODE="$1"
+    shift
+    TARGET_VARS="$1"
+    shift
+
+    set -ex
+    (
+    cat << EOF
+        . ./edksetup.sh
+        make -C BaseTools ARCH=${EDK2_ARCH}
+        build -a ${EDK2_ARCH} -t GCC5 -b RELEASE -p ${EDK2_PKG} \
+          -DSMM_REQUIRE=TRUE \
+          -DSECURE_BOOT_ENABLE=TRUE \
+          -DNETWORK_IP4_ENABLE=TRUE \
+          -DNETWORK_IP6_ENABLE=TRUE \
+          -DNETWORK_TLS_ENABLE=TRUE \
+          -DNETWORK_HTTP_BOOT_ENABLE=TRUE \
+          -DTPM2_ENABLE=TRUE \
+          -DTPM2_CONFIG_ENABLE=TRUE \
+          --pcd PcdUninstallMemAttrProtocol=TRUE \
+          $@
+EOF
+    ) | bash -e
+
+    cp Build/*/*/FV/${EDK2_FV_CODE}.fd "${TARGET_CODE}"
+    cp Build/*/*/FV/${EDK2_FV_VARS}.fd "${TARGET_VARS}"
+}
+
+mkdir -p "/usr/incus/share/qemu/"
+build_edk2 \
+  "/usr/incus/share/qemu/OVMF_CODE.4MB.fd" \
+  "/usr/incus/share/qemu/OVMF_VARS.4MB.fd" \
+  -DFD_SIZE_4MB
+
+ln -s OVMF_CODE.4MB.fd /usr/incus/share/qemu/OVMF_CODE.fd
+ln -s OVMF_VARS.4MB.fd /usr/incus/share/qemu/OVMF_VARS.fd
+
+echo "=== Building libtpms ==="
+cd /build/libtpms
+./autogen.sh
+./configure --prefix=/usr/incus --with-tpm2 --with-openssl
+make
+mkdir -p /build/target/libtpms/
+DESTDIR=/build/target/libtpms make install
+rsync -a /build/target/libtpms/usr/incus/include/ /usr/incus/include/
+rsync -a /build/target/libtpms/usr/incus/lib/ /usr/incus/lib/
+
+echo "=== Building swtpm ==="
+cd /build/swtpm
+./autogen.sh
+./configure --prefix=/usr/incus --with-seccomp --with-openssl --without-cuse
+make
+mkdir -p /build/target/swtpm/
+DESTDIR=/build/target/swtpm make install
+rsync -a /build/target/swtpm/usr/incus/bin/ /usr/incus/bin/
+rsync -a /build/target/swtpm/usr/incus/include/ /usr/incus/include/
+rsync -a /build/target/swtpm/usr/incus/lib/ /usr/incus/lib/
+
+echo "=== Building virtiofsd ==="
+cd /build/virtiofsd
+cargo build --release
+cp target/release/virtiofsd /usr/incus/bin/
+
+echo "=== Building lego ==="
+cd /build/lego
+go build -o "/usr/incus/bin/lego" github.com/go-acme/lego/v4/cmd/lego
+
+echo "=== Building skopeo ==="
+cd /build/skopeo
+go build -o "/usr/incus/bin/skopeo" github.com/containers/skopeo/cmd/skopeo
+
+echo "=== Building TrueNAS Incus CTL ==="
+cd /build/truenas_incus_ctl
+go build -o "/usr/incus/bin/truenas_incus_ctl" truenas/truenas_incus_ctl
+
+echo "=== Building QEMU ==="
+cd /build/qemu
+sed -i "s/^unset target_list$/target_list=\"$(uname -m)-softmmu\"/" configure
+sed -i "/subdir('tests')/d" meson.build
+./configure \
+        --prefix=/usr/incus \
+        --libexecdir=bin \
+        --libdir=lib \
+        --disable-bochs \
+        --disable-cloop \
+        --disable-dmg \
+        --disable-docs  \
+        --disable-fuse  \
+        --disable-guest-agent \
+        --disable-parallels \
+        --disable-qed \
+        --disable-slirp \
+        --disable-user \
+        --disable-vdi \
+        --disable-vnc \
+        --disable-xen \
+        --disable-install-blobs \
+        --enable-attr \
+        --enable-cap-ng \
+        --enable-kvm \
+        --enable-libusb \
+        --enable-usb-redir \
+        --enable-linux-aio \
+        --enable-linux-io-uring \
+        --enable-numa \
+        --enable-pie \
+        --enable-png \
+        --enable-rbd \
+        --enable-seccomp \
+        --enable-spice \
+        --enable-system \
+        --enable-tcg \
+        --enable-tools \
+        --enable-vhost-crypto \
+        --enable-vhost-kernel \
+        --enable-vhost-net \
+        --enable-vhost-user \
+        --enable-virtfs
+make
+mkdir /build/target/qemu/
+DESTDIR=/build/target/qemu/ make install
+rsync -a /build/target/qemu/usr/incus/bin/ /usr/incus/bin/
+rsync -a /build/target/qemu/usr/incus/lib/ /usr/incus/lib/
+rsync -a /build/target/qemu/usr/incus/share/qemu/ /usr/incus/share/qemu/
+cp /build/qemu/pc-bios/kvmvapic.bin /usr/incus/share/qemu/
+cp /build/qemu/pc-bios/vgabios-qxl.bin /usr/incus/share/qemu/
+cp /build/qemu/pc-bios/vgabios-virtio.bin /usr/incus/share/qemu/
+cp /build/qemu/pc-bios/efi-virtio.rom /usr/incus/share/qemu/
+cp /build/qemu/pc-bios/efi-vmxnet3.rom /usr/incus/share/qemu/
+
+echo "=== Building Secure Boot firmware ==="
+cd /build/edk2
+FIRMWARE="OVMF"
+cd "${REPO}/edk2-vars-generator"
+./edk2-vars-generator -f "${FIRMWARE}" \
+  -e /build/edk2/Build/*/*/*/EnrollDefaultKeys.efi \
+  -s /build/edk2/Build/*/*/*/Shell.efi \
+  -c "/usr/incus/share/qemu/OVMF_CODE.4MB.fd" \
+  -V "/usr/incus/share/qemu/OVMF_VARS.4MB.fd" \
+  -C "$(cat ${REPO}/zabbly-sb.oem.crt)" \
+  -o "/usr/incus/share/qemu/OVMF_VARS.4MB.ms.fd"
+
+echo "=== Stripping and cleaning up binaries ==="
+rm -Rf /usr/incus/lib/debug/
+rm -Rf /usr/incus/include/
+rm -Rf /usr/incus/lib/pkgconfig/
+rm -f /usr/incus/lib/*.a /usr/incus/lib/*.la /usr/incus/lib/*/*.a /usr/incus/lib/*/*.la
+
+rm -f /usr/incus/bin/nasm
+rm -f /usr/incus/bin/ndisasm
+rm -f /usr/incus/bin/qemu-bridge-helper
+rm -f /usr/incus/bin/qemu-edid
+rm -f /usr/incus/bin/qemu-io
+rm -f /usr/incus/bin/qemu-nbd
+rm -f /usr/incus/bin/qemu-pr-helper
+rm -f /usr/incus/bin/qemu-storage-daemon
+rm -f /usr/incus/bin/swtpm_*
+rm -f /usr/incus/share/qemu/trace-events-all
+
+strip /usr/incus/agent/*linux* || true
+strip /usr/incus/bin/* || true
+strip /usr/incus/lib/*so* || true
+
+echo "=== Making Debian package ==="
+PKGOS="debian-13"
+CODENAME="trixie"
+
+cd "${REPO}"
+mkdir -p \
+  pkg/ \
+  pkg/etc \
+  pkg/lib/systemd/system/ \
+  pkg/usr/bin/ \
+  pkg/usr/lib/sysctl.d/ \
+  pkg/usr/share/bash-completion/completions/ \
+  pkg/usr/share/fish/vendor_completions.d/ \
+  pkg/usr/share/zsh/vendor-completions/
+
+cp -R debian pkg/debian
+cp -R bin/* pkg/usr/bin/
+cp -R /usr/incus pkg/usr/
+cp -R etc/* pkg/etc/
+
+cp -R systemd/system/* pkg/lib/systemd/system/
+cp -R systemd/wrappers/* pkg/usr/incus/lib/systemd/
+cp -R systemd/sysctl.d/* pkg/usr/lib/sysctl.d/
+
+ln -s /usr/incus/share/completions/bash pkg/usr/share/bash-completion/completions/incus
+ln -s /usr/incus/share/completions/fish pkg/usr/share/fish/vendor_completions.d/incus.fish
+ln -s /usr/incus/share/completions/zsh pkg/usr/share/zsh/vendor-completions/_incus
+
+ln -s /usr/incus/bin/lxd-to-incus pkg/usr/bin/lxd-to-incus
+
+ln -s /usr/incus/bin/fuidshift pkg/usr/bin/fuidshift
+ln -s /usr/incus/bin/incus-migrate pkg/usr/bin/incus-migrate
+ln -s /usr/incus/bin/incus-simplestreams pkg/usr/bin/incus-simplestreams
+
+mkdir -p pkg/var/lib/incus
+chmod 711 pkg/var/lib/incus
+
+mkdir -p pkg/var/log/incus
+chmod 700 pkg/var/log/incus
+
+mkdir -p pkg/usr/share/locale
+for i in /usr/incus/share/locale/*.mo; do
+  LANG=$(echo $i | sed -e "s#.*/locale/##g" -e "s#.mo\$##g")
+  mkdir -p pkg/usr/share/locale/${LANG}/LC_MESSAGES
+  ln -s ${i} pkg/usr/share/locale/${LANG}/LC_MESSAGES/incus.mo
+done
+
+cd pkg
+
+sed -i debian/control \
+  -e "s/LIBPNG16/libpng16-16t64/g" \
+  -e "s/LIBUSBREDIRPARSER1/libusbredirparser1t64/g" \
+  -e "s/LIBAIO1/libaio1t64/g" \
+  -e "s/LIBBTRFS0/libbtrfs0t64/g" \
+  -e "s/LIBGPGME11/libgpgme11t64/g" \
+  -e "s/LIBUV1/libuv1t64/g"
+
+sed -i debian/control \
+  -e "s/LIBFUSE3/libfuse3-4/g"
+
+dch --package incus --create -D ${CODENAME} -M -m "Automated Incus stable build" -v 1:$(echo ${INCUS_TAG} | sed -e "s/v//" -e "s/.0$//")-$(echo ${PKGOS} | sed "s/-//g")-$(date -u +%Y%m%d%H%M) --force-distribution
+dpkg-buildpackage -b
+
+cd ..
+mkdir -p out
+mv incus_* out/
+mv incus-base_* out/
+mv incus-client_* out/
+mv incus-extra_* out/
+mv incus-ui-canonical_* out/
+
+echo "=== Build complete! ==="
+ls -la out/
+BUILDSCRIPT
+
+echo ""
+echo "=== Copying packages from container ==="
+# mkdir -p "${SCRIPT_DIR}/out"
+incus file pull -r "${CONTAINER_NAME}/root/${REPO_NAME}/out/" "${SCRIPT_DIR}/"
+
+echo ""
+echo "=== Build complete! ==="
+echo "Packages are in: ${SCRIPT_DIR}/out/"
+ls -la "${SCRIPT_DIR}/out/"
+
+echo ""
+echo "Container ${CONTAINER_NAME} is still running."
+echo "To delete it: incus delete -f ${CONTAINER_NAME}"
