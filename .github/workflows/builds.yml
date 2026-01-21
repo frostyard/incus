@@ -39,12 +39,12 @@ jobs:
       OS_ARCH: ${{ matrix.arch }}
       OS_NAME: ${{ matrix.os }}
       HOME: "/root/"
-      PKG_CONFIG_PATH: "/opt/incus/lib/pkgconfig/"
-      CGO_LDFLAGS: "-L/opt/incus/lib/"
-      CGO_CFLAGS: "-I/opt/incus/include/"
-      LD_LIBRARY_PATH: "/opt/incus/lib/"
-      CPATH: "/opt/incus/include/"
-      PATH: "/opt/incus/bin:/root/.cargo/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
+      PKG_CONFIG_PATH: "/usr/incus/lib/pkgconfig/"
+      CGO_LDFLAGS: "-L/usr/incus/lib/"
+      CGO_CFLAGS: "-I/usr/incus/include/"
+      LD_LIBRARY_PATH: "/usr/incus/lib/"
+      CPATH: "/usr/incus/include/"
+      PATH: "/usr/incus/bin:/root/.cargo/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
 
       # Linux Containers projects
       DISTROBUILDER_TAG: "distrobuilder-3.2"
@@ -184,11 +184,11 @@ jobs:
         run: |
           mkdir /build/
           mkdir -p \
-            /opt/incus/bin/ \
-            /opt/incus/include/ \
-            /opt/incus/lib/ \
-            /opt/incus/lib/systemd \
-            /opt/incus/share/
+            /usr/incus/bin/ \
+            /usr/incus/include/ \
+            /usr/incus/lib/ \
+            /usr/incus/lib/systemd \
+            /usr/incus/share/
 
       - name: Get the code
         run: |
@@ -221,37 +221,37 @@ jobs:
       - name: Build liburing
         run: |
           cd /build/liburing
-          ./configure --prefix=/opt/incus
+          ./configure --prefix=/usr/incus
           make
 
           mkdir -p /build/target/liburing/
           DESTDIR=/build/target/liburing make install
-          rsync -a /build/target/liburing/opt/incus/include/* /opt/incus/include/
-          rsync -a /build/target/liburing/opt/incus/lib/* /opt/incus/lib/
+          rsync -a /build/target/liburing/usr/incus/include/* /usr/incus/include/
+          rsync -a /build/target/liburing/usr/incus/lib/* /usr/incus/lib/
 
       - name: Build raft
         run: |
           cd /build/raft
           autoreconf -i
-          ./configure --prefix=/opt/incus
+          ./configure --prefix=/usr/incus
           make
 
           mkdir -p /build/target/raft/
           DESTDIR=/build/target/raft/ make install
-          rsync -a /build/target/raft/opt/incus/include/ /opt/incus/include/
-          rsync -a /build/target/raft/opt/incus/lib/ /opt/incus/lib/
+          rsync -a /build/target/raft/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/raft/usr/incus/lib/ /usr/incus/lib/
 
       - name: Build cowsql
         run: |
           cd /build/cowsql
           autoreconf -i
-          ./configure --prefix=/opt/incus
+          ./configure --prefix=/usr/incus
           make
 
           mkdir -p /build/target/cowsql/
           DESTDIR=/build/target/cowsql/ make install
-          rsync -a /build/target/cowsql/opt/incus/include/ /opt/incus/include/
-          rsync -a /build/target/cowsql/opt/incus/lib/ /opt/incus/lib/
+          rsync -a /build/target/cowsql/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/cowsql/usr/incus/lib/ /usr/incus/lib/
 
       - name: Build LXC
         run: |
@@ -260,8 +260,8 @@ jobs:
           cd /build/lxc
 
           meson setup build \
-                  --prefix=/opt/incus \
-                  --libdir=/opt/incus/lib \
+                  --prefix=/usr/incus \
+                  --libdir=/usr/incus/lib \
                   -Dexamples=false \
                   -Dman=false \
                   -Dtools=false \
@@ -276,11 +276,11 @@ jobs:
 
           mkdir -p /build/target/lxc/
           DESTDIR=/build/target/lxc/ meson install -C build
-          rsync -a /build/target/lxc/opt/incus/include/ /opt/incus/include/
-          rsync -a /build/target/lxc/opt/incus/lib/ /opt/incus/lib/
-          mkdir -p /opt/incus/share/lxc/config/common.conf.d/
-          mkdir -p /opt/incus/share/lxc/hooks/
-          cp /build/target/lxc/opt/incus/share/lxc/hooks/nvidia /opt/incus/share/lxc/hooks/
+          rsync -a /build/target/lxc/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/lxc/usr/incus/lib/ /usr/incus/lib/
+          mkdir -p /usr/incus/share/lxc/config/common.conf.d/
+          mkdir -p /usr/incus/share/lxc/hooks/
+          cp /build/target/lxc/usr/incus/share/lxc/hooks/nvidia /usr/incus/share/lxc/hooks/
 
       - name: Build LXCFS
         run: |
@@ -288,20 +288,20 @@ jobs:
 
           cd /build/lxcfs
           meson setup build \
-                  --prefix=/opt/incus \
-                  --libdir=/opt/incus/lib \
+                  --prefix=/usr/incus \
+                  --libdir=/usr/incus/lib \
                   -Ddocs=false \
                   -Dtests=false
           meson compile -C build
 
           mkdir -p /build/target/lxcfs/
           DESTDIR=/build/target/lxcfs/ meson install -C build
-          rsync -a /build/target/lxcfs/opt/incus/bin/ /opt/incus/bin/
-          rsync -a /build/target/lxcfs/opt/incus/share/ /opt/incus/share/
-          rsync -a /build/target/lxcfs/opt/incus/lib/ /opt/incus/lib/
+          rsync -a /build/target/lxcfs/usr/incus/bin/ /usr/incus/bin/
+          rsync -a /build/target/lxcfs/usr/incus/share/ /usr/incus/share/
+          rsync -a /build/target/lxcfs/usr/incus/lib/ /usr/incus/lib/
 
-          sed -i "s#/var/lib/lxcfs#/var/lib/incus-lxcfs#g" /opt/incus/share/lxcfs/lxc.mount.hook
-          patch -p1 /opt/incus/share/lxcfs/lxc.mount.hook < "${REPO}/patches/lxcfs-0001-hook.patch"
+          sed -i "s#/var/lib/lxcfs#/var/lib/incus-lxcfs#g" /usr/incus/share/lxcfs/lxc.mount.hook
+          patch -p1 /usr/incus/share/lxcfs/lxc.mount.hook < "${REPO}/patches/lxcfs-0001-hook.patch"
 
       - name: Build Incus
         run: |
@@ -309,40 +309,57 @@ jobs:
 
           cd /build/incus
 
-          go build -o "/opt/incus/bin/fuidshift" github.com/lxc/incus/v6/cmd/fuidshift
-          go build -o "/opt/incus/bin/incus" github.com/lxc/incus/v6/cmd/incus
-          go build -o "/opt/incus/bin/incus-benchmark" github.com/lxc/incus/v6/cmd/incus-benchmark
-          go build -o "/opt/incus/bin/incus-migrate" github.com/lxc/incus/v6/cmd/incus-migrate
-          go build -o "/opt/incus/bin/incus-simplestreams" github.com/lxc/incus/v6/cmd/incus-simplestreams
-          go build -o "/opt/incus/bin/incus-user" github.com/lxc/incus/v6/cmd/incus-user
-          go build -o "/opt/incus/bin/incusd" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/incusd
-          go build -o "/opt/incus/bin/lxc-to-incus" github.com/lxc/incus/v6/cmd/lxc-to-incus
-          go build -o "/opt/incus/bin/lxd-to-incus" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/lxd-to-incus
+          git cherry-pick 0b0311794c2750b50e9a0aa598143f547ee5653e  # doc/openfga: Improve required config keys
+          git cherry-pick eafa7db765970d7f09c20474781efed3c63f5446  # incusd/network/ovn: Drop now obsolete DNS check
+          git cherry-pick 539860ce96195859ffc5d477a701c4d7ce967669  # incusd/storage/truenas: fix SetVolumeQuota issue when growing FS volumes
+          git cherry-pick eb0b2f5d9b35ecf90d09d63854e80ea8602744a7  # cmd/incus-user: Don't reset setup if user has access
+          git cherry-pick f95e2af5b76c91caa20c2ecef85df9ff6074d70e  # incusd/network/physical: Allow parent re-use for bridges
+          git cherry-pick 969f32300002fd980992e3b62bedf398bdf7dbe6  # incusd/network/physical: Allow vlan.tagged
+          git cherry-pick b72643a540172fdb69b97b82dd60740ac06ad890  # incusd/device: Add vlan.tagged to physical NICs
+          git cherry-pick add134c50d1ab69af063f8c0af4178129f09d51e  # incusd/device/nic_physical: Fix internal bridge handling
+          git cherry-pick 110a5235313c8b415d12aa2d72ece95e70bd574f  # doc/network_ovn: Add note about advanced external_interfaces syntax
+          git cherry-pick 58e7df140e1af36dc6d30abc8578b05889be813b  # incusd/instance/drivers: Add size parameter to UpdateBlockSize method
+          git cherry-pick 06309e0d5fdbc265d7e9a226f773c25d624f654d  # incusd/storage/drivers: Export roundAbove function
+          git cherry-pick 62b535b9c03f9b21c625bd56369a235fa528afbd  # incusd/storage/drivers: Add Qcow2Resize and export isQcow2Block function
+          git cherry-pick ef90f5de6a14ca4ac4eb4e8a3d2929128d84d2e4  # incusd/storage: Add support for resizing qcow2 volumes
+          git cherry-pick 27870526d1cb69d50b443c8b89187d9a16a30ea7  # Added a few more environment variables. PATHEXT and COMPUTERNAME were needed for 'shutdown.exe'. Meanwhile, I've connected as SYSTEM with PsExec to show the environment variables by default and added them.
+          git cherry-pick bef2fc76a6f9c070cc07e068c7dd3a205884e3d1  # incusd/instance/drivers: Fix adding disk with a device name longer than 31 bytes
+          git cherry-pick fe9c020eea99b05ed3eee2a5c50ed124e15df14a  # incusd/instance/drivers: Add tests for hashName
 
-          mkdir -p /opt/incus/agent
+          go build -o "/usr/incus/bin/fuidshift" github.com/lxc/incus/v6/cmd/fuidshift
+          go build -o "/usr/incus/bin/incus" github.com/lxc/incus/v6/cmd/incus
+          go build -o "/usr/incus/bin/incus-benchmark" github.com/lxc/incus/v6/cmd/incus-benchmark
+          go build -o "/usr/incus/bin/incus-migrate" github.com/lxc/incus/v6/cmd/incus-migrate
+          go build -o "/usr/incus/bin/incus-simplestreams" github.com/lxc/incus/v6/cmd/incus-simplestreams
+          go build -o "/usr/incus/bin/incus-user" github.com/lxc/incus/v6/cmd/incus-user
+          go build -o "/usr/incus/bin/incusd" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/incusd
+          go build -o "/usr/incus/bin/lxc-to-incus" github.com/lxc/incus/v6/cmd/lxc-to-incus
+          go build -o "/usr/incus/bin/lxd-to-incus" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/lxd-to-incus
+
+          mkdir -p /usr/incus/agent
           if [ "$(uname -m)" = "x86_64" ]; then
-              GOARCH=amd64 CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.linux.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-              GOARCH=386 CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.linux.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-              GOARCH=amd64 GOOS=windows CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.windows.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-              GOARCH=386 GOOS=windows CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.windows.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-              GOARCH=amd64 GOOS=darwin CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.macos.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=amd64 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=386 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=amd64 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=386 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=amd64 GOOS=darwin CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.macos.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
           elif [ "$(uname -m)" = "aarch64" ]; then
-              GOARCH=arm64 CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.linux.aarch64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-              GOARCH=arm64 GOOS=windows CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.windows.aarch64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-              GOARCH=arm64 GOOS=darwin CGO_ENABLED=0 go build -o "/opt/incus/agent/incus-agent.macos.aarch64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=arm64 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.aarch64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=arm64 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.aarch64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+              GOARCH=arm64 GOOS=darwin CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.macos.aarch64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
           fi
 
           make build-mo
-          mkdir -p /opt/incus/share/locale
-          cp po/*.mo /opt/incus/share/locale/
+          mkdir -p /usr/incus/share/locale
+          cp po/*.mo /usr/incus/share/locale/
 
           make doc
-          cp -R doc/html /opt/incus/doc
+          cp -R doc/html /usr/incus/doc
 
-          mkdir -p /opt/incus/share/completions/
-          /opt/incus/bin/incus completion bash > /opt/incus/share/completions/bash
-          /opt/incus/bin/incus completion fish > /opt/incus/share/completions/fish
-          /opt/incus/bin/incus completion zsh > /opt/incus/share/completions/zsh
+          mkdir -p /usr/incus/share/completions/
+          /usr/incus/bin/incus completion bash > /usr/incus/share/completions/bash
+          /usr/incus/bin/incus completion fish > /usr/incus/share/completions/fish
+          /usr/incus/bin/incus completion zsh > /usr/incus/share/completions/zsh
 
       - name: Build UI (canonical)
         run: |
@@ -357,19 +374,19 @@ jobs:
           yarn install
           yarn build
 
-          mkdir -p /opt/incus/ui-canonical/
-          rsync -a /build/incus-ui-canonical/build/ui/ /opt/incus/ui-canonical/
+          mkdir -p /usr/incus/ui-canonical/
+          rsync -a /build/incus-ui-canonical/build/ui/ /usr/incus/ui-canonical/
 
       - name: Build Distrobuilder
         run: |
           cd /build/distrobuilder
-          go build -o "/opt/incus/bin/distrobuilder" github.com/lxc/distrobuilder/distrobuilder
+          go build -o "/usr/incus/bin/distrobuilder" github.com/lxc/distrobuilder/distrobuilder
 
       - name: Build CRIU
         run: |
           cd /build/criu
           make WERROR=0
-          cp criu/criu /opt/incus/bin/
+          cp criu/criu /usr/incus/bin/
 
       - name: Build libnvidia-container
         run: |
@@ -382,21 +399,21 @@ jobs:
 
           mkdir /build/target/libnvidia-container
           DESTDIR=/build/target/libnvidia-container make install prefix=/
-          rsync -a /build/target/libnvidia-container/bin/ /opt/incus/bin/
-          rsync -a /build/target/libnvidia-container/include/ /opt/incus/include/
-          rsync -a /build/target/libnvidia-container/lib/ /opt/incus/lib/
+          rsync -a /build/target/libnvidia-container/bin/ /usr/incus/bin/
+          rsync -a /build/target/libnvidia-container/include/ /usr/incus/include/
+          rsync -a /build/target/libnvidia-container/lib/ /usr/incus/lib/
 
       - name: Build minio
         run: |
           cd /build/minio
           make build
-          cp minio /opt/incus/bin/
+          cp minio /usr/incus/bin/
 
       - name: Build minio client
         run: |
           cd /build/mc
           make build
-          cp mc /opt/incus/bin/
+          cp mc /usr/incus/bin/
 
       - name: Build seabios
         if: ${{ matrix.arch == 'amd64' }}
@@ -422,8 +439,8 @@ jobs:
           make oldnoconfig V=1
           make V=1 PYTHON=python3
 
-          mkdir -p /opt/incus/share/qemu/
-          cp out/bios.bin /opt/incus/share/qemu/seabios.bin
+          mkdir -p /usr/incus/share/qemu/
+          cp out/bios.bin /usr/incus/share/qemu/seabios.bin
 
       - name: Build nasm
         run: |
@@ -431,12 +448,12 @@ jobs:
 
           cd /build/nasm
           patch -p1 < "${REPO}/patches/nasm-0000-disable-manpages.patch"
-          ./configure --prefix=/opt/incus
+          ./configure --prefix=/usr/incus
           make
 
           mkdir -p /build/target/nasm/
           DESTDIR=/build/target/nasm make install
-          rsync -a /build/target/nasm/opt/incus/bin/ /opt/incus/bin/
+          rsync -a /build/target/nasm/usr/incus/bin/ /usr/incus/bin/
 
       - name: Build EDK2
         run: |
@@ -500,60 +517,60 @@ jobs:
               fi
           }
 
-          mkdir -p "/opt/incus/share/qemu/"
+          mkdir -p "/usr/incus/share/qemu/"
           build_edk2 \
-            "/opt/incus/share/qemu/OVMF_CODE.4MB.fd" \
-            "/opt/incus/share/qemu/OVMF_VARS.4MB.fd" \
+            "/usr/incus/share/qemu/OVMF_CODE.4MB.fd" \
+            "/usr/incus/share/qemu/OVMF_VARS.4MB.fd" \
             -DFD_SIZE_4MB
 
-          ln -s OVMF_CODE.4MB.fd /opt/incus/share/qemu/OVMF_CODE.fd
-          ln -s OVMF_VARS.4MB.fd /opt/incus/share/qemu/OVMF_VARS.fd
+          ln -s OVMF_CODE.4MB.fd /usr/incus/share/qemu/OVMF_CODE.fd
+          ln -s OVMF_VARS.4MB.fd /usr/incus/share/qemu/OVMF_VARS.fd
 
       - name: Build libtmps
         run: |
           cd /build/libtpms
           ./autogen.sh
-          ./configure --prefix=/opt/incus --with-tpm2 --with-openssl
+          ./configure --prefix=/usr/incus --with-tpm2 --with-openssl
           make
 
           mkdir -p /build/target/libtpms/
           DESTDIR=/build/target/libtpms make install
-          rsync -a /build/target/libtpms/opt/incus/include/ /opt/incus/include/
-          rsync -a /build/target/libtpms/opt/incus/lib/ /opt/incus/lib/
+          rsync -a /build/target/libtpms/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/libtpms/usr/incus/lib/ /usr/incus/lib/
 
       - name: Build swtpm
         run: |
           cd /build/swtpm
           ./autogen.sh
-          ./configure --prefix=/opt/incus --with-seccomp --with-openssl --without-cuse
+          ./configure --prefix=/usr/incus --with-seccomp --with-openssl --without-cuse
           make
 
           mkdir -p /build/target/swtpm/
           DESTDIR=/build/target/swtpm make install
-          rsync -a /build/target/swtpm/opt/incus/bin/ /opt/incus/bin/
-          rsync -a /build/target/swtpm/opt/incus/include/ /opt/incus/include/
-          rsync -a /build/target/swtpm/opt/incus/lib/ /opt/incus/lib/
+          rsync -a /build/target/swtpm/usr/incus/bin/ /usr/incus/bin/
+          rsync -a /build/target/swtpm/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/swtpm/usr/incus/lib/ /usr/incus/lib/
 
       - name: Build virtiofsd
         run: |
           cd /build/virtiofsd
           cargo build --release
-          cp target/release/virtiofsd /opt/incus/bin/
+          cp target/release/virtiofsd /usr/incus/bin/
 
       - name: Build lego
         run: |
           cd /build/lego
-          go build -o "/opt/incus/bin/lego" github.com/go-acme/lego/v4/cmd/lego
+          go build -o "/usr/incus/bin/lego" github.com/go-acme/lego/v4/cmd/lego
 
       - name: Build skopeo
         run: |
           cd /build/skopeo
-          go build -o "/opt/incus/bin/skopeo" github.com/containers/skopeo/cmd/skopeo
+          go build -o "/usr/incus/bin/skopeo" github.com/containers/skopeo/cmd/skopeo
 
       - name: Build TrueNAS Incus CTL
         run: |
           cd /build/truenas_incus_ctl
-          go build -o "/opt/incus/bin/truenas_incus_ctl" truenas/truenas_incus_ctl
+          go build -o "/usr/incus/bin/truenas_incus_ctl" truenas/truenas_incus_ctl
 
       - name: Build QEMU
         run: |
@@ -565,7 +582,7 @@ jobs:
 
           sed -i "/subdir('tests')/d" meson.build
           ./configure \
-                  --prefix=/opt/incus \
+                  --prefix=/usr/incus \
                   --libexecdir=bin \
                   --libdir=lib \
                   --disable-bochs \
@@ -607,14 +624,14 @@ jobs:
 
           mkdir /build/target/qemu/
           DESTDIR=/build/target/qemu/ make install
-          rsync -a /build/target/qemu/opt/incus/bin/ /opt/incus/bin/
-          rsync -a /build/target/qemu/opt/incus/lib/ /opt/incus/lib/
-          rsync -a /build/target/qemu/opt/incus/share/qemu/ /opt/incus/share/qemu/
-          cp /build/qemu/pc-bios/kvmvapic.bin /opt/incus/share/qemu/
-          cp /build/qemu/pc-bios/vgabios-qxl.bin /opt/incus/share/qemu/
-          cp /build/qemu/pc-bios/vgabios-virtio.bin /opt/incus/share/qemu/
-          cp /build/qemu/pc-bios/efi-virtio.rom /opt/incus/share/qemu/
-          cp /build/qemu/pc-bios/efi-vmxnet3.rom /opt/incus/share/qemu/
+          rsync -a /build/target/qemu/usr/incus/bin/ /usr/incus/bin/
+          rsync -a /build/target/qemu/usr/incus/lib/ /usr/incus/lib/
+          rsync -a /build/target/qemu/usr/incus/share/qemu/ /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/kvmvapic.bin /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/vgabios-qxl.bin /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/vgabios-virtio.bin /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/efi-virtio.rom /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/efi-vmxnet3.rom /usr/incus/share/qemu/
 
       - name: Build Secure Boot firmware
         run: |
@@ -631,31 +648,32 @@ jobs:
           ./edk2-vars-generator -f "${FIRMWARE}" \
             -e /build/edk2/Build/*/*/*/EnrollDefaultKeys.efi \
             -s /build/edk2/Build/*/*/*/Shell.efi \
-            -c "/opt/incus/share/qemu/OVMF_CODE.4MB.fd" \
-            -V "/opt/incus/share/qemu/OVMF_VARS.4MB.fd" \
+            -c "/usr/incus/share/qemu/OVMF_CODE.4MB.fd" \
+            -V "/usr/incus/share/qemu/OVMF_VARS.4MB.fd" \
             -C "$(cat ${REPO}/zabbly-sb.oem.crt)" \
-            -o "/opt/incus/share/qemu/OVMF_VARS.4MB.ms.fd"
+            -o "/usr/incus/share/qemu/OVMF_VARS.4MB.ms.fd"
 
       - name: Strip and cleanup binaries
         run: |
-          rm -Rf /opt/incus/lib/debug/
-          rm -Rf /opt/incus/include/
-          rm -Rf /opt/incus/lib/pkgconfig/
-          rm /opt/incus/lib/*.a /opt/incus/lib/*.la /opt/incus/lib/*/*.a /opt/incus/lib/*/*.la
+          rm -Rf /usr/incus/lib/debug/
+          rm -Rf /usr/incus/include/
+          rm -Rf /usr/incus/lib/pkgconfig/
+          rm /usr/incus/lib/*.a /usr/incus/lib/*.la /usr/incus/lib/*/*.a /usr/incus/lib/*/*.la
 
-          rm /opt/incus/bin/nasm
-          rm /opt/incus/bin/ndisasm
-          rm /opt/incus/bin/qemu-bridge-helper
-          rm /opt/incus/bin/qemu-edid
-          rm /opt/incus/bin/qemu-io
-          rm /opt/incus/bin/qemu-pr-helper
-          rm /opt/incus/bin/qemu-storage-daemon
-          rm /opt/incus/bin/swtpm_*
-          rm /opt/incus/share/qemu/trace-events-all
+          rm /usr/incus/bin/nasm
+          rm /usr/incus/bin/ndisasm
+          rm /usr/incus/bin/qemu-bridge-helper
+          rm /usr/incus/bin/qemu-edid
+          rm /usr/incus/bin/qemu-io
+          rm /usr/incus/bin/qemu-nbd
+          rm /usr/incus/bin/qemu-pr-helper
+          rm /usr/incus/bin/qemu-storage-daemon
+          rm /usr/incus/bin/swtpm_*
+          rm /usr/incus/share/qemu/trace-events-all
 
-          strip /opt/incus/agent/*linux*
-          strip /opt/incus/bin/*
-          strip /opt/incus/lib/*so*
+          strip /usr/incus/agent/*linux*
+          strip /usr/incus/bin/*
+          strip /usr/incus/lib/*so*
 
       - name: Make a Debian package
         env:
@@ -671,7 +689,6 @@ jobs:
             pkg/ \
             pkg/etc \
             pkg/lib/systemd/system/ \
-            pkg/opt/ \
             pkg/usr/bin/ \
             pkg/usr/lib/sysctl.d/ \
             pkg/usr/share/bash-completion/completions/ \
@@ -680,20 +697,22 @@ jobs:
 
           cp -R debian pkg/debian
           cp -R bin/* pkg/usr/bin/
-          cp -R /opt/incus pkg/opt/
+          cp -R /usr/incus pkg/usr/
           cp -R etc/* pkg/etc/
 
           cp -R systemd/system/* pkg/lib/systemd/system/
-          cp -R systemd/wrappers/* pkg/opt/incus/lib/systemd/
+          cp -R systemd/wrappers/* pkg/usr/incus/lib/systemd/
           cp -R systemd/sysctl.d/* pkg/usr/lib/sysctl.d/
 
-          ln -s /opt/incus/share/completions/bash pkg/usr/share/bash-completion/completions/incus
-          ln -s /opt/incus/share/completions/fish pkg/usr/share/fish/vendor_completions.d/incus.fish
-          ln -s /opt/incus/share/completions/zsh pkg/usr/share/zsh/vendor-completions/_incus
+          ln -s /usr/incus/share/completions/bash pkg/usr/share/bash-completion/completions/incus
+          ln -s /usr/incus/share/completions/fish pkg/usr/share/fish/vendor_completions.d/incus.fish
+          ln -s /usr/incus/share/completions/zsh pkg/usr/share/zsh/vendor-completions/_incus
 
-          ln -s /opt/incus/bin/fuidshift pkg/usr/bin/fuidshift
-          ln -s /opt/incus/bin/incus-simplestreams pkg/usr/bin/incus-simplestreams
-          ln -s /opt/incus/bin/incus-benchmark pkg/usr/bin/incus-benchmark
+          ln -s /usr/incus/bin/lxd-to-incus pkg/usr/bin/lxd-to-incus
+
+          ln -s /usr/incus/bin/fuidshift pkg/usr/bin/fuidshift
+          ln -s /usr/incus/bin/incus-migrate pkg/usr/bin/incus-migrate
+          ln -s /usr/incus/bin/incus-simplestreams pkg/usr/bin/incus-simplestreams
 
           mkdir -p pkg/var/lib/incus
           chmod 711 pkg/var/lib/incus
@@ -702,7 +721,7 @@ jobs:
           chmod 700 pkg/var/log/incus
 
           mkdir -p pkg/usr/share/locale
-          for i in /opt/incus/share/locale/*.mo; do
+          for i in /usr/incus/share/locale/*.mo; do
             LANG=$(echo $i | sed -e "s#.*/locale/##g" -e "s#.mo\$##g")
             mkdir -p pkg/usr/share/locale/${LANG}/LC_MESSAGES
             ln -s ${i} pkg/usr/share/locale/${LANG}/LC_MESSAGES/incus.mo
@@ -753,3 +772,18 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}
           path: out/*
+
+      - name: Publish to frostyard repo
+        uses: frostyard/repogen/.github/actions/publish-to-r2@main
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}
+          r2-bucket: frostyardrepo
+          purge-cache: "true"
+          cloudflare-zone: ${{ secrets.CLOUDFLARE_ZONE }}
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          packages-dir: ./out
+          package-type: deb # or sysext
+          base-url: https://repository.frostyard.org # required for sysext
