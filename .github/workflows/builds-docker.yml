@@ -30,10 +30,22 @@ jobs:
 
       # Linux Containers projects
       DISTROBUILDER_TAG: "distrobuilder-3.2"
+<<<<<<< HEAD
       INCUS_TAG: "v6.22.0"
       INCUS_UI_CANONICAL_TAG: "incus-0.19.8"
       LXCFS_TAG: "v6.0.6"
       LXC_TAG: "v6.0.6"
+||||||| parent of 4845ab4 (fix: tag)
+      INCUS_TAG: "v6.21.1"
+      INCUS_UI_CANONICAL_TAG: "incus-0.19.2"
+      LXCFS_TAG: "v6.0.5"
+      LXC_TAG: "v6.0.5"
+=======
+      INCUS_TAG: "v6.21.0"
+      INCUS_UI_CANONICAL_TAG: "incus-0.19.2"
+      LXCFS_TAG: "v6.0.5"
+      LXC_TAG: "v6.0.5"
+>>>>>>> 4845ab4 (fix: tag)
 
       # External dependencies
       COWSQL_TAG: "v1.15.9"
