@@ -1,0 +1,43 @@
+name: Sync Upstream
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Monday 6am UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: stable
+          fetch-depth: 0
+          token: ${{ secrets.ORG_PAT }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge upstream stable
+        run: |
+          git remote add upstream https://github.com/zabbly/incus.git
+          git fetch upstream stable
+          git merge upstream/stable --no-edit
+
+      - name: Regenerate Docker build workflow
+        run: python3 sync-docker-build.py
+
+      - name: Commit and push
+        run: |
+          git add .github/workflows/builds-docker.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: sync builds-docker.yml from upstream"
+          fi
+          git push
