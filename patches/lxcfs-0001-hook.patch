@@ -1,4 +1,4 @@
---- /opt/incus/share/lxcfs/lxc.mount.hook	2023-09-11 18:08:27.114252754 +0000
+--- /usr/incus/share/lxcfs/lxc.mount.hook	2023-09-11 18:08:27.114252754 +0000
 +++ ../lxc.mount.hook	2023-09-11 18:16:42.535196861 +0000
 @@ -38,9 +38,17 @@ fi
  

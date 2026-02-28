@@ -5,8 +5,8 @@ Requires=incus.socket
 
 [Service]
 Type=oneshot
-ExecStart=/opt/incus/lib/systemd/incus-startup start
-ExecStop=/opt/incus/lib/systemd/incus-startup stop
+ExecStart=/usr/incus/lib/systemd/incus-startup start
+ExecStop=/usr/incus/lib/systemd/incus-startup stop
 TimeoutStartSec=600s
 TimeoutStopSec=600s
 RemainAfterExit=yes

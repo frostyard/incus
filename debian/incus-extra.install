@@ -5,10 +5,10 @@ usr/bin/incus-migrate
 usr/bin/incus-simplestreams
 usr/bin/lxc-to-incus
 usr/bin/lxd-to-incus
-opt/incus/bin/distrobuilder
-opt/incus/bin/fuidshift
-opt/incus/bin/incus-benchmark
-opt/incus/bin/incus-migrate
-opt/incus/bin/incus-simplestreams
-opt/incus/bin/lxc-to-incus
-opt/incus/bin/lxd-to-incus
+usr/incus/bin/distrobuilder
+usr/incus/bin/fuidshift
+usr/incus/bin/incus-benchmark
+usr/incus/bin/incus-migrate
+usr/incus/bin/incus-simplestreams
+usr/incus/bin/lxc-to-incus
+usr/incus/bin/lxd-to-incus

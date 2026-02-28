@@ -3,6 +3,6 @@ usr/share/bash-completion
 usr/share/fish
 usr/share/locale
 usr/share/zsh
-opt/incus/bin/incus
-opt/incus/share/completions
-opt/incus/share/locale
+usr/incus/bin/incus
+usr/incus/share/completions
+usr/incus/share/locale
