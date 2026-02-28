@@ -11,20 +11,21 @@ override_dh_install:
 	dh_installsysusers
 
 	# Handle incus-base
-	mkdir -p debian/incus-base/opt/incus/ui/
+	mkdir -p debian/incus-base/usr/incus/ui/
 
 	# Handle incus
-	rm -R debian/incus-base/opt/incus/share/qemu
-	rm -R debian/incus-base/opt/incus/agent
-	rm debian/incus-base/opt/incus/bin/qemu-img
-	rm debian/incus-base/opt/incus/bin/qemu-system-*
-	rm debian/incus-base/opt/incus/bin/virtiofsd
+	rm -R debian/incus-base/usr/incus/share/qemu
+	rm -R debian/incus-base/usr/incus/agent
+	rm debian/incus-base/usr/incus/bin/qemu-img
+	rm debian/incus-base/usr/incus/bin/qemu-nbd
+	rm debian/incus-base/usr/incus/bin/qemu-system-*
+	rm debian/incus-base/usr/incus/bin/virtiofsd
 
 	# Handle incus-client
 	rm debian/incus-base/usr/bin/incus
-	rm debian/incus-base/opt/incus/bin/incus
-	rm -R debian/incus-base/opt/incus/share/completions
-	rm -R debian/incus-base/opt/incus/share/locale
+	rm debian/incus-base/usr/incus/bin/incus
+	rm -R debian/incus-base/usr/incus/share/completions
+	rm -R debian/incus-base/usr/incus/share/locale
 	rm -R debian/incus-base/usr/share/bash-completion
 	rm -R debian/incus-base/usr/share/fish
 	rm -R debian/incus-base/usr/share/locale
@@ -33,15 +34,19 @@ override_dh_install:
 	# Handle incus-extra
 	rm debian/incus-base/usr/bin/distrobuilder
 	rm debian/incus-base/usr/bin/fuidshift
+	rm debian/incus-base/usr/bin/incus-benchmark
 	rm debian/incus-base/usr/bin/incus-migrate
 	rm debian/incus-base/usr/bin/incus-simplestreams
 	rm debian/incus-base/usr/bin/lxc-to-incus
-	rm debian/incus-base/opt/incus/bin/distrobuilder
-	rm debian/incus-base/opt/incus/bin/fuidshift
-	rm debian/incus-base/opt/incus/bin/incus-migrate
-	rm debian/incus-base/opt/incus/bin/incus-simplestreams
-	rm debian/incus-base/opt/incus/bin/lxc-to-incus
+	rm debian/incus-base/usr/bin/lxd-to-incus
+	rm debian/incus-base/usr/incus/bin/distrobuilder
+	rm debian/incus-base/usr/incus/bin/fuidshift
+	rm debian/incus-base/usr/incus/bin/incus-benchmark
+	rm debian/incus-base/usr/incus/bin/incus-migrate
+	rm debian/incus-base/usr/incus/bin/incus-simplestreams
+	rm debian/incus-base/usr/incus/bin/lxc-to-incus
+	rm debian/incus-base/usr/incus/bin/lxd-to-incus
 
 	# Handle incus-ui-canonical
-	mkdir -p debian/incus-ui-canonical/opt/incus/
-	mv debian/incus-base/opt/incus/ui-canonical debian/incus-ui-canonical/opt/incus/ui
+	mkdir -p debian/incus-ui-canonical/usr/incus/
+	mv debian/incus-base/usr/incus/ui-canonical debian/incus-ui-canonical/usr/incus/ui

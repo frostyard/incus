@@ -6,10 +6,10 @@ Before=incus.service
 [Service]
 EnvironmentFile=-/etc/environment
 EnvironmentFile=-/etc/default/incus
-Environment=LD_LIBRARY_PATH=/opt/incus/lib/
+Environment=LD_LIBRARY_PATH=/usr/incus/lib/
 OOMScoreAdjust=-1000
 ExecStartPre=-/bin/mkdir -p /var/lib/incus-lxcfs
-ExecStart=/opt/incus/bin/lxcfs /var/lib/incus-lxcfs $LXCFS_OPTS
+ExecStart=/usr/incus/bin/lxcfs /var/lib/incus-lxcfs $LXCFS_OPTS
 KillMode=process
 Restart=on-failure
 ExecStopPost=-/bin/fusermount -u /var/lib/incus-lxcfs

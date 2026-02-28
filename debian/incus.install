@@ -1,5 +1,6 @@
-opt/incus/agent
-opt/incus/bin/qemu-img
-opt/incus/bin/qemu-system-*
-opt/incus/bin/virtiofsd
-opt/incus/share/qemu
+usr/incus/agent
+usr/incus/bin/qemu-img
+usr/incus/bin/qemu-nbd
+usr/incus/bin/qemu-system-*
+usr/incus/bin/virtiofsd
+usr/incus/share/qemu
