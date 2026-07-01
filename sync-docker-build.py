@@ -200,8 +200,17 @@ def transform_step(name, lines):
         name = 'Build libtpms'
 
     if name in STEP_TRANSFORMS:
-        return STEP_TRANSFORMS[name](lines)
-    return lines
+        lines = STEP_TRANSFORMS[name](lines)
+
+    # The Docker build runs as root inside the container; sudo isn't
+    # installed (and isn't needed). Upstream added sudo for its non-root
+    # runner setup, so strip it from every command line.
+    return [strip_sudo(l) for l in lines]
+
+
+def strip_sudo(line):
+    """Drop `sudo ` command prefixes (start of line or after a pipe/operator)."""
+    return re.sub(r'(?<![\w-])sudo\s+', '', line)
 
 
 @transformer('Install dependencies')
