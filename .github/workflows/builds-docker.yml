@@ -647,8 +647,14 @@ jobs:
           strip /usr/incus/lib/*so*
 
       - name: Make a Debian package
+        env:
+          PKGOS: "debian-13"
         run: |
-          CODENAME=trixie
+          [ "${PKGOS}" = "debian-12" ] && CODENAME=bookworm
+          [ "${PKGOS}" = "debian-13" ] && CODENAME=trixie
+          [ "${PKGOS}" = "ubuntu-22.04" ] && CODENAME=jammy
+          [ "${PKGOS}" = "ubuntu-24.04" ] && CODENAME=noble
+          [ "${PKGOS}" = "ubuntu-26.04" ] && CODENAME=resolute
 
           mkdir -p \
             pkg/ \
@@ -693,16 +699,21 @@ jobs:
 
           cd pkg
 
-          sed -i debian/control \
-            -e "s/LIBPNG16/libpng16-16t64/g" \
-            -e "s/LIBUSBREDIRPARSER1/libusbredirparser1t64/g" \
-            -e "s/LIBAIO1/libaio1t64/g" \
-            -e "s/LIBBTRFS0/libbtrfs0t64/g" \
-            -e "s/LIBUV1/libuv1t64/g"
-
-          if [ "${PKGOS}" = "ubuntu-26.04" ]; then
+          if [ "${PKGOS}" = "debian-13" ] || [ "${PKGOS}" = "ubuntu-24.04" ] || [ "${PKGOS}" = "ubuntu-26.04" ]; then
             sed -i debian/control \
-              -e "s/LIBGPGME11/libgpgme45/g"
+              -e "s/LIBPNG16/libpng16-16t64/g" \
+              -e "s/LIBUSBREDIRPARSER1/libusbredirparser1t64/g" \
+              -e "s/LIBAIO1/libaio1t64/g" \
+              -e "s/LIBBTRFS0/libbtrfs0t64/g" \
+              -e "s/LIBUV1/libuv1t64/g"
+
+            if [ "${PKGOS}" = "ubuntu-26.04" ]; then
+              sed -i debian/control \
+                -e "s/LIBGPGME11/libgpgme45/g"
+            else
+              sed -i debian/control \
+                -e "s/LIBGPGME11/libgpgme11t64/g"
+            fi
           else
             sed -i debian/control \
               -e "s/LIBPNG16/libpng16-16/g" \
@@ -729,7 +740,7 @@ jobs:
               -e "s/LIBNET1/libnet1/g"
           fi
 
-          dch --package incus --create -D ${CODENAME} -M -m "Automated Incus stable build" -v 1:$(echo ${INCUS_TAG} | sed -e "s/v//" -e "s/.0$//")-debian13-$(date -u +%Y%m%d%H%M) --force-distribution
+          dch --package incus --create -D ${CODENAME} -M -m "Automated Incus stable build" -v 1:$(echo ${INCUS_TAG} | sed -e "s/v//" -e "s/.0$//")-$(echo ${PKGOS} | sed "s/-//g")-$(date -u +%Y%m%d%H%M) --force-distribution
           dpkg-buildpackage -b
 
           cd ..

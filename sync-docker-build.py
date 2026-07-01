@@ -353,85 +353,26 @@ def _transform_build_qemu(lines):
 
 @transformer('Make a Debian package')
 def _transform_make_debian_package(lines):
-    """Simplify for Trixie only (no matrix, no PKGOS)."""
+    """Pin PKGOS to debian-13 for the Trixie-only docker build.
+
+    builds-docker.yml only ever builds debian-13, so rather than trying to
+    collapse the per-release ${PKGOS} conditionals down to the Trixie branch
+    (brittle: the match patterns drift out of sync with builds.yml, and the
+    flat parser can't handle nested if/else -- which silently leaked the
+    bookworm branch and shipped libfuse3-3/libgpgme11 into a Trixie package),
+    we keep every conditional verbatim and just pin the matrix-provided PKGOS
+    to the constant "debian-13". Each conditional then resolves to the correct
+    Trixie branch (libfuse3-4, libgpgme11t64, libnet1, CODENAME=trixie, the
+    debian13 version tag) and any future edits to builds.yml flow through
+    unchanged.
+    """
     result = []
-    i = 0
-    codename_emitted = False
-
-    while i < len(lines):
-        line = lines[i]
-        s = line.strip()
-
-        # Remove the env: PKGOS block (step-level property)
-        if s == 'env:' and line.startswith('        '):
-            i += 1
-            # Skip env sub-properties
-            while i < len(lines) and lines[i].startswith('          ') and ':' in lines[i]:
-                i += 1
+    for line in lines:
+        # Pin the matrix-provided PKGOS to the fixed Trixie value.
+        if line.strip() == 'PKGOS: ${{ matrix.os }}':
+            result.append(line.replace('${{ matrix.os }}', '"debian-13"'))
             continue
-
-        # Replace codename detection lines ([ "${PKGOS}" = ... ] && CODENAME=...)
-        if 'PKGOS' in line and '&& CODENAME=' in line:
-            if not codename_emitted:
-                result.append('          CODENAME=trixie')
-                codename_emitted = True
-            i += 1
-            continue
-
-        # First if block: t64 library names for debian-13/ubuntu-24.04
-        if ('if [ "${PKGOS}" = "debian-13" ] || [ "${PKGOS}" = "ubuntu-24.04" ]' in line):
-            i += 1
-            # Extract the if-body (trixie-compatible branch)
-            body = []
-            while i < len(lines) and lines[i].strip() not in ('else', 'fi'):
-                body.append(lines[i])
-                i += 1
-            # Skip else block
-            if i < len(lines) and lines[i].strip() == 'else':
-                i += 1
-                while i < len(lines) and lines[i].strip() != 'fi':
-                    i += 1
-            # Skip fi
-            if i < len(lines) and lines[i].strip() == 'fi':
-                i += 1
-            # De-indent body by 2 spaces (if-body -> base level)
-            for bl in body:
-                if bl.startswith('            '):
-                    result.append('          ' + bl[12:])
-                else:
-                    result.append(bl)
-            continue
-
-        # Second if block: LIBFUSE3 for debian-13
-        if 'if [ "${PKGOS}" = "debian-13" ]; then' in line:
-            i += 1
-            body = []
-            while i < len(lines) and lines[i].strip() not in ('else', 'fi'):
-                body.append(lines[i])
-                i += 1
-            if i < len(lines) and lines[i].strip() == 'else':
-                i += 1
-                while i < len(lines) and lines[i].strip() != 'fi':
-                    i += 1
-            if i < len(lines) and lines[i].strip() == 'fi':
-                i += 1
-            for bl in body:
-                if bl.startswith('            '):
-                    result.append('          ' + bl[12:])
-                else:
-                    result.append(bl)
-            continue
-
-        # Replace dch version: $(echo ${PKGOS} | sed "s/-//g") -> debian13
-        if 'dch --package incus' in line:
-            line = line.replace(
-                '$(echo ${PKGOS} | sed "s/-//g")',
-                'debian13'
-            )
-
         result.append(line)
-        i += 1
-
     return result
 
 
