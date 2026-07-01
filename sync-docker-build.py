@@ -134,6 +134,10 @@ def generate(env_lines, steps):
         '    env:',
         '      OS_ARCH: "amd64"',
         '      OS_NAME: "debian-13"',
+        # The container runs as root; upstream dropped HOME for its
+        # /home/runner runner setup. Pin it so pipx/rustup/npm install
+        # under /root, matching the rewritten PATH below.
+        '      HOME: "/root/"',
     ])
 
     # Env vars (skip OS_ARCH/OS_NAME, already hardcoded above)
@@ -172,6 +176,12 @@ def generate(env_lines, steps):
 
     # Release job
     out.extend(RELEASE_JOB_LINES)
+
+    # The Docker build runs as root (HOME=/root), but upstream's runner
+    # setup hardcodes /home/runner in PATH and tool install prefixes
+    # (pipx meson, rustup cargo, npm yarn). Point them all at /root so the
+    # installed binaries are actually on PATH.
+    out = [line.replace('/home/runner/', '/root/') for line in out]
 
     return out
 

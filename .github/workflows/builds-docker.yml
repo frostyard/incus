@@ -20,12 +20,13 @@ jobs:
     env:
       OS_ARCH: "amd64"
       OS_NAME: "debian-13"
+      HOME: "/root/"
       PKG_CONFIG_PATH: "/usr/incus/lib/pkgconfig/"
       CGO_LDFLAGS: "-L/usr/incus/lib/"
       CGO_CFLAGS: "-I/usr/incus/include/"
       LD_LIBRARY_PATH: "/usr/incus/lib/"
       CPATH: "/usr/incus/include/"
-      PATH: "/home/runner/.cargo/bin:/home/runner/.local/bin:/usr/incus/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
+      PATH: "/root/.cargo/bin:/root/.local/bin:/usr/incus/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
 
       # Linux Containers projects
       DISTROBUILDER_TAG: "distrobuilder-3.2"
@@ -348,7 +349,7 @@ jobs:
           # Complete re-branding.
           find -type f -name "*.ts" -o -name "*.tsx" -o -name "*.scss" | xargs sed -i -f "${REPO}/patches/ui-canonical-renames.sed"
 
-          npm install -g --prefix /home/runner/.local yarn
+          npm install -g --prefix /root/.local yarn
           yarn install
           yarn build
 
