@@ -2,9 +2,10 @@
 
 Incus package builds provided by Zabbly.
 
-There are three repositories available:
+There are four repositories available:
 
 * `lts-6.0` (Incus 6.0.x LTS)
+* `lts-7.0` (Incus 7.0.x LTS)
 * `stable` (latest release of Incus)
 * `daily` (untested daily builds)
 
@@ -14,11 +15,11 @@ Those packages are built for:
 
 * Ubuntu 22.04 LTS (`jammy`)
 * Ubuntu 24.04 LTS (`noble`)
-* Debian 11 (`bullseye`) (`amd64` only)
+* Ubuntu 26.04 LTS (`resolute`)
 * Debian 12 (`bookworm`)
 * Debian 13 (`trixie`)
 
-Unless otherwise mentioned, packages are built for both `amd64` (Intel/AMD 64bit) and `arm64` (Arm 64bit).
+All  packages are built for both `amd64` (Intel/AMD 64bit) and `arm64` (Arm 64bit).
 
 NOTE: It is often possible to use those packages on other non-LTS Ubuntu releases by picking the closest LTS release prior to the Ubuntu version being run.
 
@@ -79,6 +80,25 @@ sh -c 'cat <<EOF > /etc/apt/sources.list.d/zabbly-incus-lts-6.0.sources
 Enabled: yes
 Types: deb
 URIs: https://pkgs.zabbly.com/incus/lts-6.0
+Suites: $(. /etc/os-release && echo ${VERSION_CODENAME})
+Components: main
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/zabbly.asc
+
+EOF'
+```
+
+### 7.0 LTS repository
+
+On any of the distributions above, you can add the package repository at `/etc/apt/sources.list.d/zabbly-incus-lts-7.0.sources`.
+
+Run the following command to add the 7.0 LTS repository:
+
+```sh
+sh -c 'cat <<EOF > /etc/apt/sources.list.d/zabbly-incus-lts-7.0.sources
+Enabled: yes
+Types: deb
+URIs: https://pkgs.zabbly.com/incus/lts-7.0
 Suites: $(. /etc/os-release && echo ${VERSION_CODENAME})
 Components: main
 Architectures: $(dpkg --print-architecture)

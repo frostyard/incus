@@ -1,7 +1,7 @@
 Source: incus
 Section: admin
 Priority: optional
-Maintainer: Zabbly ZFS builds <info@zabbly.com>
+Maintainer: Zabbly <info@zabbly.com>
 Build-Depends: debhelper-compat (= 12)
 Standards-Version: 4.6.2
 Homepage: https://linuxcontainers.org
@@ -41,10 +41,13 @@ Depends: ${misc:Depends},
   dnsmasq-base,
   e2fsprogs,
   fuse3,
+  gnutls-bin,
   incus-client (= ${source:Version}),
   iproute2,
   nftables | iptables,
+  iputils-ping,
   iw,
+  kmod,
   libacl1,
   LIBAIO1,
   libapparmor1,
@@ -57,7 +60,7 @@ Depends: ${misc:Depends},
   libgnutls30,
   LIBGPGME11,
   libjson-glib-1.0-0,
-  libnet1,
+  LIBNET1,
   libnftables1,
   libnl-3-200,
   libprotobuf-c1,
@@ -66,6 +69,7 @@ Depends: ${misc:Depends},
   libsqlite3-0,
   libudev1,
   LIBUV1,
+  lshw,
   pci.ids,
   rsync,
   gdisk,
@@ -139,7 +143,6 @@ Description: Incus - Extra tools
   - incus-migrate
   - incus-simplestreams
   - lxc-to-incus
-  - lxd-to-incus
  .
  This build of Incus is provided for free by Zabbly.
  Zabbly can be contacted for commercial support and development on Incus.

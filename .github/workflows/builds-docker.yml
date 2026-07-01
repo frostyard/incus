@@ -20,39 +20,36 @@ jobs:
     env:
       OS_ARCH: "amd64"
       OS_NAME: "debian-13"
-      HOME: "/root/"
       PKG_CONFIG_PATH: "/usr/incus/lib/pkgconfig/"
       CGO_LDFLAGS: "-L/usr/incus/lib/"
       CGO_CFLAGS: "-I/usr/incus/include/"
       LD_LIBRARY_PATH: "/usr/incus/lib/"
       CPATH: "/usr/incus/include/"
-      PATH: "/usr/incus/bin:/root/.cargo/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
+      PATH: "/home/runner/.cargo/bin:/home/runner/.local/bin:/usr/incus/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
 
       # Linux Containers projects
       DISTROBUILDER_TAG: "distrobuilder-3.2"
-      INCUS_TAG: "v6.22.0"
-      INCUS_UI_CANONICAL_TAG: "incus-0.19.8"
-      LXCFS_TAG: "v6.0.6"
-      LXC_TAG: "v6.0.6"
+      INCUS_TAG: "v7.2.0"
+      INCUS_UI_CANONICAL_TAG: "incus-0.21.3"
+      LXCFS_TAG: "v7.0.0"
+      LXC_TAG: "v7.0.0"
 
       # External dependencies
       COWSQL_TAG: "v1.15.9"
       CRIU_TAG: "v4.2"
-      EDK2_TAG: "edk2-stable202602"
-      GOLANG_TAG: "go1.26.0"
-      LEGO_TAG: "v4.32.0"
+      EDK2_TAG: "edk2-stable202605"
+      GOLANG_TAG: "go1.26.4"
+      LEGO_TAG: "v4.35.2"
       LIBTPMS_TAG: "v0.10.2"
-      LIBURING_TAG: "liburing-2.14"
-      MINIO_MC_TAG: "RELEASE.2025-08-13T08-35-41Z"
-      MINIO_TAG: "RELEASE.2025-10-15T17-29-55Z"
+      LIBURING_TAG: "liburing-2.15"
       NASM_TAG: "nasm-2.16.03"
-      NVIDIA_CONTAINER_TAG: "v1.18.2"
-      QEMU_TAG: "v10.2.1"
+      NVIDIA_CONTAINER_TAG: "v1.19.1"
+      QEMU_TAG: "v11.0.2"
       RAFT_TAG: "v0.22.1"
       SEABIOS_TAG: "rel-1.17.0"
-      SKOPEO_TAG: "v1.22.0"
+      SKOPEO_TAG: "v1.23.0"
       SWTPM_TAG: "v0.10.1"
-      TRUENAS_INCUS_CTL_TAG: "v0.7.3"
+      TRUENAS_INCUS_CTL_TAG: "v0.7.7"
       VIRTIOFSD_TAG: "v1.13.3"
 
     steps:
@@ -64,8 +61,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt-get update
-          apt-get install --no-install-recommends --yes \
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes \
             acpica-tools \
             asciidoc \
             autoconf \
@@ -82,6 +79,8 @@ jobs:
             flex \
             gawk \
             gettext \
+            gnutls-bin \
+            gnutls-dev \
             git \
             iproute2 \
             jq \
@@ -123,6 +122,7 @@ jobs:
             lsb-release \
             mtools \
             ninja-build \
+            pipx \
             pkg-config \
             protobuf-c-compiler \
             protobuf-compiler \
@@ -131,6 +131,7 @@ jobs:
             python3-pexpect \
             python3-pip \
             python3-setuptools \
+            python3-tomli \
             python3-venv \
             rsync \
             socat \
@@ -138,10 +139,9 @@ jobs:
             xmlto \
             xorriso
 
-          apt-get install --no-install-recommends --yes systemd-dev || true
+          sudo apt-get install --no-install-recommends --yes systemd-dev || true
 
-          pip3 install meson --break-system-packages || pip3 install meson
-          pip3 install tomli --break-system-packages || pip3 install tomli
+          pipx install meson
 
       - name: Configure git
         run: |
@@ -151,7 +151,7 @@ jobs:
 
       - name: Install Go
         run: |
-          curl -sL "https://go.dev/dl/${GOLANG_TAG}.linux-${OS_ARCH}.tar.gz" | tar -C /usr/local/ -zx
+          curl -sL "https://go.dev/dl/${GOLANG_TAG}.linux-${OS_ARCH}.tar.gz" | sudo tar -C /usr/local/ -zx
           go version
 
       - name: Install Rust
@@ -162,11 +162,13 @@ jobs:
       - name: Install Node
         run: |
           mkdir /usr/local/node/
-          curl -sL "https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz" | tar -C /usr/local/node/ -Jx --strip-components=1
+          curl -sL "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz" | tar -C /usr/local/node/ -Jx --strip-components=1
 
       - name: Build environment
         run: |
-          mkdir /build/
+          sudo mkdir -p /build/ /opt/
+          sudo chown $(id -u):$(id -g) /build/ /opt/
+
           mkdir -p \
             /usr/incus/bin/ \
             /usr/incus/include/ \
@@ -188,8 +190,6 @@ jobs:
           git clone https://github.com/cowsql/cowsql /build/cowsql --depth 1 -b "${COWSQL_TAG}"
           git clone https://github.com/cowsql/raft /build/raft --depth 1 -b "${RAFT_TAG}"
           git clone https://github.com/go-acme/lego /build/lego --depth 1 -b "${LEGO_TAG}"
-          git clone https://github.com/minio/mc /build/mc --depth 1 -b "${MINIO_MC_TAG}"
-          git clone https://github.com/minio/minio /build/minio --depth 1 -b "${MINIO_TAG}"
           git clone https://github.com/NVIDIA/libnvidia-container /build/libnvidia-container --depth 1 -b "${NVIDIA_CONTAINER_TAG}"
           git clone https://github.com/stefanberger/libtpms /build/libtpms --depth 1 -b "${LIBTPMS_TAG}"
           git clone https://github.com/stefanberger/swtpm /build/swtpm --depth 1 -b "${SWTPM_TAG}"
@@ -227,7 +227,11 @@ jobs:
 
       - name: Build cowsql
         run: |
+          REPO="${PWD}"
+
           cd /build/cowsql
+          patch -p1 < "${REPO}/patches/cowsql-0001-discarded-qualifiers.patch"
+
           autoreconf -i
           ./configure --prefix=/usr/incus
           make
@@ -293,22 +297,35 @@ jobs:
 
           cd /build/incus
 
-          go build -o "/usr/incus/bin/fuidshift" github.com/lxc/incus/v6/cmd/fuidshift
-          go build -o "/usr/incus/bin/incus" github.com/lxc/incus/v6/cmd/incus
-          go build -o "/usr/incus/bin/incus-benchmark" github.com/lxc/incus/v6/cmd/incus-benchmark
-          go build -o "/usr/incus/bin/incus-migrate" github.com/lxc/incus/v6/cmd/incus-migrate
-          go build -o "/usr/incus/bin/incus-simplestreams" github.com/lxc/incus/v6/cmd/incus-simplestreams
-          go build -o "/usr/incus/bin/incus-user" github.com/lxc/incus/v6/cmd/incus-user
-          go build -o "/usr/incus/bin/incusd" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/incusd
-          go build -o "/usr/incus/bin/lxc-to-incus" github.com/lxc/incus/v6/cmd/lxc-to-incus
-          go build -o "/usr/incus/bin/lxd-to-incus" -tags=libsqlite3 github.com/lxc/incus/v6/cmd/lxd-to-incus
+          git cherry-pick 30c603507e631eb90ed189a9803709a95ed61c71  # incus/move: Apply --storage pool to dependent disks
+          git cherry-pick c97d867faabce3bb56176709396b0506afc0d95e  # incusd/firewall: Fix double Wait in nftParseRuleset
+          git cherry-pick 713a400c979c2473e40f813a92246b7788aebe17  # incusd/device: Allow static CIDR address on unmanaged bridge
+          git cherry-pick 31de4be43c17eafa6c9aa516f9f5a99cea1569c6  # shared/logger: Add WarnOnErrorExcept helper
+          git cherry-pick 7a6df891b5c60087333458479fc6757b4055a586  # incus: Avoid double-close warning on volume/bucket/instance import
+          git cherry-pick bfece20827965836d27c90579be4a766e6ac4748  # incusd/device: Reset VM disk I/O limits on unset
+          git cherry-pick 6eb95b4dae48ac81be7e4ca4b13e4c637f343234  # incusd/devices: Allow /32 and /128 for OCI addresses
+          git cherry-pick 661d3c36df2467e36f5b80208aa11d4ef7833526  # incusd/operations: Fix nil deref race in Cancel
+
+          go build -o "/usr/incus/bin/fuidshift" github.com/lxc/incus/v7/cmd/fuidshift
+          go build -o "/usr/incus/bin/incus" github.com/lxc/incus/v7/cmd/incus
+          go build -o "/usr/incus/bin/incus-benchmark" github.com/lxc/incus/v7/cmd/incus-benchmark
+          go build -o "/usr/incus/bin/incus-migrate" github.com/lxc/incus/v7/cmd/incus-migrate
+          go build -o "/usr/incus/bin/incus-simplestreams" github.com/lxc/incus/v7/cmd/incus-simplestreams
+          go build -o "/usr/incus/bin/incus-user" github.com/lxc/incus/v7/cmd/incus-user
+          go build -o "/usr/incus/bin/incusd" -tags=libsqlite3 github.com/lxc/incus/v7/cmd/incusd
+          go build -o "/usr/incus/bin/lxc-to-incus" github.com/lxc/incus/v7/cmd/lxc-to-incus
 
           mkdir -p /usr/incus/agent
-          GOARCH=amd64 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-          GOARCH=386 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-          GOARCH=amd64 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-          GOARCH=386 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.i686" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
-          GOARCH=amd64 GOOS=darwin CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.macos.x86_64" -tags=agent,netgo github.com/lxc/incus/v6/cmd/incus-agent
+          GOARCH=amd64 GOOS=darwin CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.macos.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          GOARCH=amd64 GOOS=freebsd CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.freebsd.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+          GOARCH=386 GOOS=freebsd CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.freebsd.i686" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          GOARCH=amd64 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+          GOARCH=386 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.i686" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          GOARCH=amd64 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+          GOARCH=386 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.i686" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
 
           make build-mo
           mkdir -p /usr/incus/share/locale
@@ -331,7 +348,7 @@ jobs:
           # Complete re-branding.
           find -type f -name "*.ts" -o -name "*.tsx" -o -name "*.scss" | xargs sed -i -f "${REPO}/patches/ui-canonical-renames.sed"
 
-          npm install yarn --global
+          npm install -g --prefix /home/runner/.local yarn
           yarn install
           yarn build
 
@@ -345,7 +362,11 @@ jobs:
 
       - name: Build CRIU
         run: |
+          REPO="${PWD}"
+
           cd /build/criu
+          patch -p1 < "${REPO}/patches/criu-0001-fix-rseq-detection.patch"
+
           make WERROR=0
           cp criu/criu /usr/incus/bin/
 
@@ -363,18 +384,6 @@ jobs:
           rsync -a /build/target/libnvidia-container/bin/ /usr/incus/bin/
           rsync -a /build/target/libnvidia-container/include/ /usr/incus/include/
           rsync -a /build/target/libnvidia-container/lib/ /usr/incus/lib/
-
-      - name: Build minio
-        run: |
-          cd /build/minio
-          make build
-          cp minio /usr/incus/bin/
-
-      - name: Build minio client
-        run: |
-          cd /build/mc
-          make build
-          cp mc /usr/incus/bin/
 
       - name: Build seabios
         run: |
@@ -428,7 +437,7 @@ jobs:
           patch -p1 < "${REPO}/patches/edk2-0006-disable-EFI-memory-attributes-protocol.patch"
           patch -p1 < "${REPO}/patches/edk2-0007-OvmfPkg-X64-add-opt-org-tianocore-UninstallMemAttrProtocol-support.patch"
           patch -p1 < "${REPO}/patches/edk2-0008-Disable-virtio-keyboard.patch"
-          patch -p1 < "${REPO}/patches/edk2-0009-disable-UEFI-shell-under-SecureBoot.patch"
+          patch -p1 < "${REPO}/patches/edk2-9999-disable-UEFI-shell-under-SecureBoot.patch"
 
           sed -i "s#02/02/2022#$(date +%m/%d/%Y)#g" OvmfPkg/SmbiosPlatformDxe/SmbiosPlatformDxe.c
 
@@ -448,7 +457,7 @@ jobs:
               cat << EOF
                   . ./edksetup.sh
                   make -C BaseTools ARCH=${EDK2_ARCH}
-                  build -a ${EDK2_ARCH} -t GCC5 -b RELEASE -p ${EDK2_PKG} \
+                  build -a ${EDK2_ARCH} -t GCC -b RELEASE -p ${EDK2_PKG} \
                     -DSMM_REQUIRE=TRUE \
                     -DSECURE_BOOT_ENABLE=TRUE \
                     -DNETWORK_IP4_ENABLE=TRUE \
@@ -477,7 +486,11 @@ jobs:
 
       - name: Build libtpms
         run: |
+          REPO="${PWD}"
+
           cd /build/libtpms
+          patch -p1 < "${REPO}/patches/libtpms-0001-Fix-a-compilation-error-in-TPMLIB_GetPlaintext.patch"
+
           ./autogen.sh
           ./configure --prefix=/usr/incus --with-tpm2 --with-openssl
           make
@@ -491,7 +504,7 @@ jobs:
         run: |
           cd /build/swtpm
           ./autogen.sh
-          ./configure --prefix=/usr/incus --with-seccomp --with-openssl --without-cuse
+          ./configure --prefix=/usr/incus --with-gnutls --with-seccomp --with-openssl --without-cuse
           make
 
           mkdir -p /build/target/swtpm/
@@ -499,6 +512,13 @@ jobs:
           rsync -a /build/target/swtpm/usr/incus/bin/ /usr/incus/bin/
           rsync -a /build/target/swtpm/usr/incus/include/ /usr/incus/include/
           rsync -a /build/target/swtpm/usr/incus/lib/ /usr/incus/lib/
+
+          mkdir -p /usr/incus/etc/
+          cat > /usr/incus/etc/swtpm-localca.options << EOF
+          --platform-manufacturer Incus
+          --platform-version 2.1
+          --platform-model QEMU
+          EOF
 
       - name: Build virtiofsd
         run: |
@@ -514,11 +534,16 @@ jobs:
       - name: Build skopeo
         run: |
           cd /build/skopeo
-          go build -o "/usr/incus/bin/skopeo" github.com/containers/skopeo/cmd/skopeo
+          go build -o "/usr/incus/bin/skopeo" ./cmd/skopeo
 
       - name: Build TrueNAS Incus CTL
         run: |
+          REPO="${PWD}"
+
           cd /build/truenas_incus_ctl
+
+          patch -p1 < "${REPO}/patches/truenas-0001-bump-timeouts.patch"
+
           go build -o "/usr/incus/bin/truenas_incus_ctl" truenas/truenas_incus_ctl
 
       - name: Build QEMU
@@ -579,6 +604,7 @@ jobs:
           cp /build/qemu/pc-bios/kvmvapic.bin /usr/incus/share/qemu/
           cp /build/qemu/pc-bios/vgabios-qxl.bin /usr/incus/share/qemu/
           cp /build/qemu/pc-bios/vgabios-virtio.bin /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/efi-e1000e.rom /usr/incus/share/qemu/
           cp /build/qemu/pc-bios/efi-virtio.rom /usr/incus/share/qemu/
           cp /build/qemu/pc-bios/efi-vmxnet3.rom /usr/incus/share/qemu/
 
@@ -613,7 +639,6 @@ jobs:
           rm /usr/incus/bin/qemu-io
           rm /usr/incus/bin/qemu-pr-helper
           rm /usr/incus/bin/qemu-storage-daemon
-          rm /usr/incus/bin/swtpm_*
           rm /usr/incus/share/qemu/trace-events-all
 
           strip /usr/incus/agent/*linux*
@@ -672,11 +697,36 @@ jobs:
             -e "s/LIBUSBREDIRPARSER1/libusbredirparser1t64/g" \
             -e "s/LIBAIO1/libaio1t64/g" \
             -e "s/LIBBTRFS0/libbtrfs0t64/g" \
-            -e "s/LIBGPGME11/libgpgme11t64/g" \
             -e "s/LIBUV1/libuv1t64/g"
 
-          sed -i debian/control \
-            -e "s/LIBFUSE3/libfuse3-4/g"
+          if [ "${PKGOS}" = "ubuntu-26.04" ]; then
+            sed -i debian/control \
+              -e "s/LIBGPGME11/libgpgme45/g"
+          else
+            sed -i debian/control \
+              -e "s/LIBPNG16/libpng16-16/g" \
+              -e "s/LIBUSBREDIRPARSER1/libusbredirparser1/g" \
+              -e "s/LIBAIO1/libaio1/g" \
+              -e "s/LIBBTRFS0/libbtrfs0/g" \
+              -e "s/LIBGPGME11/libgpgme11/g" \
+              -e "s/LIBUV1/libuv1/g"
+          fi
+
+          if [ "${PKGOS}" = "debian-13" ] || [ "${PKGOS}" = "ubuntu-26.04" ]; then
+            sed -i debian/control \
+              -e "s/LIBFUSE3/libfuse3-4/g"
+          else
+            sed -i debian/control \
+              -e "s/LIBFUSE3/libfuse3-3/g"
+          fi
+
+          if [ "${PKGOS}" = "ubuntu-26.04" ]; then
+            sed -i debian/control \
+              -e "s/LIBNET1/libnet9/g"
+          else
+            sed -i debian/control \
+              -e "s/LIBNET1/libnet1/g"
+          fi
 
           dch --package incus --create -D ${CODENAME} -M -m "Automated Incus stable build" -v 1:$(echo ${INCUS_TAG} | sed -e "s/v//" -e "s/.0$//")-debian13-$(date -u +%Y%m%d%H%M) --force-distribution
           dpkg-buildpackage -b

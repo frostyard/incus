@@ -38,14 +38,12 @@ override_dh_install:
 	rm debian/incus-base/usr/bin/incus-migrate
 	rm debian/incus-base/usr/bin/incus-simplestreams
 	rm debian/incus-base/usr/bin/lxc-to-incus
-	rm debian/incus-base/usr/bin/lxd-to-incus
 	rm debian/incus-base/usr/incus/bin/distrobuilder
 	rm debian/incus-base/usr/incus/bin/fuidshift
 	rm debian/incus-base/usr/incus/bin/incus-benchmark
 	rm debian/incus-base/usr/incus/bin/incus-migrate
 	rm debian/incus-base/usr/incus/bin/incus-simplestreams
 	rm debian/incus-base/usr/incus/bin/lxc-to-incus
-	rm debian/incus-base/usr/incus/bin/lxd-to-incus
 
 	# Handle incus-ui-canonical
 	mkdir -p debian/incus-ui-canonical/usr/incus/
