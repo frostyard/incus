@@ -41,7 +41,6 @@ echo "  - Updating bin/ wrapper scripts..."
 sed -i 's|/opt/incus|/usr/incus|g' \
     bin/incus \
     bin/lxc-to-incus \
-    bin/lxd-to-incus \
     bin/incus-migrate \
     bin/distrobuilder
 
