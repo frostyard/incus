@@ -215,7 +215,14 @@ def transform_step(name, lines):
     # The Docker build runs as root inside the container; sudo isn't
     # installed (and isn't needed). Upstream added sudo for its non-root
     # runner setup, so strip it from every command line.
-    return [strip_sudo(l) for l in lines]
+    lines = [strip_sudo(l) for l in lines]
+
+    # The Docker workflow has no matrix, so `matrix.os`/`matrix.arch` in
+    # step-level `if:` conditions evaluate to empty and silently skip the
+    # step. Rewrite them against the pinned OS_NAME/OS_ARCH env vars.
+    return [l.replace('matrix.os', 'env.OS_NAME').replace('matrix.arch', 'env.OS_ARCH')
+            if l.strip().startswith('if:') else l
+            for l in lines]
 
 
 def strip_sudo(line):

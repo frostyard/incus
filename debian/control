@@ -12,6 +12,7 @@ Architecture: linux-any
 Depends: ${misc:Depends},
   incus-base (= ${source:Version}),
   genisoimage,
+  LIBVIRGL,
   libnuma1,
   libpixman-1-0,
   LIBPNG16,
@@ -140,6 +141,7 @@ Description: Incus - Extra tools
   - distrobuilder
   - fuidshift
   - incus-benchmark
+  - incus-compose
   - incus-migrate
   - incus-simplestreams
   - lxc-to-incus

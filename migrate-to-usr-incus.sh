@@ -40,6 +40,7 @@ sed -i 's|/opt/incus|/usr/incus|g' \
 echo "  - Updating bin/ wrapper scripts..."
 sed -i 's|/opt/incus|/usr/incus|g' \
     bin/incus \
+    bin/incus-compose \
     bin/lxc-to-incus \
     bin/incus-migrate \
     bin/distrobuilder

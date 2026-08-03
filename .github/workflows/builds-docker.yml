@@ -30,28 +30,30 @@ jobs:
 
       # Linux Containers projects
       DISTROBUILDER_TAG: "distrobuilder-3.2"
-      INCUS_TAG: "v7.2.0"
-      INCUS_UI_CANONICAL_TAG: "incus-0.21.3"
+      INCUS_COMPOSE_TAG: "v1.1.0"
+      INCUS_TAG: "v7.3.0"
+      INCUS_UI_CANONICAL_TAG: "incus-0.21.5"
       LXCFS_TAG: "v7.0.0"
       LXC_TAG: "v7.0.0"
 
       # External dependencies
       COWSQL_TAG: "v1.15.9"
-      CRIU_TAG: "v4.2"
+      CRIU_TAG: "v4.2.1"
       EDK2_TAG: "edk2-stable202605"
-      GOLANG_TAG: "go1.26.4"
+      GOLANG_TAG: "go1.26.5"
       LEGO_TAG: "v4.35.2"
       LIBTPMS_TAG: "v0.10.2"
       LIBURING_TAG: "liburing-2.15"
       NASM_TAG: "nasm-2.16.03"
       NVIDIA_CONTAINER_TAG: "v1.19.1"
-      QEMU_TAG: "v11.0.2"
+      QEMU_TAG: "v11.0.3"
       RAFT_TAG: "v0.22.1"
       SEABIOS_TAG: "rel-1.17.0"
-      SKOPEO_TAG: "v1.23.0"
+      SKOPEO_TAG: "v1.24.0"
       SWTPM_TAG: "v0.10.1"
       TRUENAS_INCUS_CTL_TAG: "v0.7.7"
-      VIRTIOFSD_TAG: "v1.13.3"
+      VIRGLRENDERER_TAG: "1.3.0"
+      VIRTIOFSD_TAG: "v1.14.0"
 
     steps:
       - name: Checkout code
@@ -140,6 +142,14 @@ jobs:
             xmlto \
             xorriso
 
+          if [ "${OS_NAME}" = "debian-13" ] || [ "${OS_NAME}" = "ubuntu-26.04" ]; then
+            apt-get install --no-install-recommends --yes \
+                libdrm-dev \
+                libegl1-mesa-dev \
+                libgbm-dev \
+                libepoxy-dev
+          fi
+
           apt-get install --no-install-recommends --yes systemd-dev || true
 
           pipx install meson
@@ -183,6 +193,7 @@ jobs:
           git clone https://github.com/lxc/lxc /build/lxc -b "${LXC_TAG}"
           git clone https://github.com/lxc/lxcfs /build/lxcfs --depth 1 -b "${LXCFS_TAG}"
           git clone https://github.com/lxc/incus /build/incus -b "${INCUS_TAG}"
+          git clone https://github.com/lxc/incus-compose /build/incus-compose --depth 1 -b "${INCUS_COMPOSE_TAG}"
           git clone https://github.com/zabbly/incus-ui-canonical /build/incus-ui-canonical --depth 1 -b "${INCUS_UI_CANONICAL_TAG}"
 
           git clone https://github.com/axboe/liburing /build/liburing --depth 1 -b "${LIBURING_TAG}"
@@ -199,6 +210,10 @@ jobs:
           git clone https://gitlab.com/qemu-project/qemu /build/qemu --depth 1 -b "${QEMU_TAG}"
           git clone https://gitlab.com/qemu-project/seabios /build/seabios --depth 1 -b "${SEABIOS_TAG}"
           git clone https://gitlab.com/virtio-fs/virtiofsd /build/virtiofsd --depth 1 -b "${VIRTIOFSD_TAG}"
+
+          if [ "${OS_NAME}" = "debian-13" ] || [ "${OS_NAME}" = "ubuntu-26.04" ]; then
+            git clone https://gitlab.freedesktop.org/virgl/virglrenderer /build/virglrenderer --depth 1 -b "${VIRGLRENDERER_TAG}"
+          fi
 
           mkdir /build/nasm/
           curl -sL "https://www.nasm.us/pub/nasm/releasebuilds/$(echo ${NASM_TAG} | cut -d- -f2)/${NASM_TAG}.tar.gz" --resolve www.nasm.us:443:198.137.202.136 | tar -C /build/nasm/ -zx --strip-components=1
@@ -298,14 +313,22 @@ jobs:
 
           cd /build/incus
 
-          git cherry-pick 30c603507e631eb90ed189a9803709a95ed61c71  # incus/move: Apply --storage pool to dependent disks
-          git cherry-pick c97d867faabce3bb56176709396b0506afc0d95e  # incusd/firewall: Fix double Wait in nftParseRuleset
-          git cherry-pick 713a400c979c2473e40f813a92246b7788aebe17  # incusd/device: Allow static CIDR address on unmanaged bridge
-          git cherry-pick 31de4be43c17eafa6c9aa516f9f5a99cea1569c6  # shared/logger: Add WarnOnErrorExcept helper
-          git cherry-pick 7a6df891b5c60087333458479fc6757b4055a586  # incus: Avoid double-close warning on volume/bucket/instance import
-          git cherry-pick bfece20827965836d27c90579be4a766e6ac4748  # incusd/device: Reset VM disk I/O limits on unset
-          git cherry-pick 6eb95b4dae48ac81be7e4ca4b13e4c637f343234  # incusd/devices: Allow /32 and /128 for OCI addresses
-          git cherry-pick 661d3c36df2467e36f5b80208aa11d4ef7833526  # incusd/operations: Fix nil deref race in Cancel
+          git cherry-pick b406a0397cc3a7778c79dbf863e3559b38d34353  # incus/low-level: Fix naming inconsistency
+          git cherry-pick a2aa861daec6d4539bdfd5c519416b9b08bc87ec  # i18n: Update translation templates
+          git cherry-pick 19269185635ab4470de60ef1c828a43a13ed0fe4  # shared/api: Hide additional sensitive config keys
+          git cherry-pick 66e092f0fff264066b2754f3f16b1bcb2c7c7cba  # incusd/instance/qmp: Bump query-migrate timeout
+          git cherry-pick 54d230183cde6f5d7e996e1b1b488ddcf6929bfc  # incusd/db: Have NetworkNodeConfigs only consider the requested network
+          git cherry-pick 066ef03eb91f2a2450d256aa70b3857dbfa6b69c  # incusd/network/ovn: Skip empty transactions in SetChassisGroupPriority
+          git cherry-pick 28c287796fce2e5488873a633ae8bb1b3ef5e97a  # docs: Clarify the sentence about Incus owning the ZFS pool/dataset
+          git cherry-pick 11a82f81ce9f2b5a8ea74c668a33b8eb82f7f90e  # incusd/daemon: Drop else branches in project expansion
+          git cherry-pick 59a71850fbce8df07bff8057138e2f9e690ee2b0  # incusd/bgp: Resolve neighbor address for unnumbered peers
+          git cherry-pick 6c9ac20100b3b5da3926f544c2577ba5ef9c2edc  # incus/remote: Restrict proxy /1.0 cache to GET and invalidate on changes
+          git cherry-pick 69b0915fdd9e8ea5fe27fc69b3e21c1e61438d4b  # incusd/endpoints: Fix proxy protocol handling
+          git cherry-pick 07f8dae5fd83b9496579b3bcbb9c07d77155a911  # incusd/storage: Unmount leftover mounts in CleanupInstancePaths
+          git cherry-pick cf1cf59f5b0b6fcf16261892825d1a211c18b30c  # incusd/device: Check interface isn't in use by host before passthrough
+          git cherry-pick 14f676ab8851f457d7c840f2774b62d33e97ef70  # incusd/instance/lxc: Fix mount options of OCI /run tmpfs
+          git cherry-pick 3a7ddebe4f2c4558d880f815f85c282ad192593f  # incusd/instance/lxc: Skip OCI /run tmpfs when image populates /run
+          git cherry-pick d8fecc63932678d06cbf6d0bba765492bd920755  # incusd/cluster: Stop instances in place when evacuation has no target
 
           go build -o "/usr/incus/bin/fuidshift" github.com/lxc/incus/v7/cmd/fuidshift
           go build -o "/usr/incus/bin/incus" github.com/lxc/incus/v7/cmd/incus
@@ -361,12 +384,16 @@ jobs:
           cd /build/distrobuilder
           go build -o "/usr/incus/bin/distrobuilder" github.com/lxc/distrobuilder/distrobuilder
 
+      - name: Build Incus Compose
+        run: |
+          cd /build/incus-compose
+          go build -ldflags="-w -s -X github.com/lxc/incus-compose/cmd/incus-compose/version.Version=${INCUS_COMPOSE_TAG}" -o "/usr/incus/bin/incus-compose" github.com/lxc/incus-compose/cmd/incus-compose
+
       - name: Build CRIU
         run: |
           REPO="${PWD}"
 
           cd /build/criu
-          patch -p1 < "${REPO}/patches/criu-0001-fix-rseq-detection.patch"
 
           make WERROR=0
           cp criu/criu /usr/incus/bin/
@@ -485,6 +512,26 @@ jobs:
           ln -s OVMF_CODE.4MB.fd /usr/incus/share/qemu/OVMF_CODE.fd
           ln -s OVMF_VARS.4MB.fd /usr/incus/share/qemu/OVMF_VARS.fd
 
+          # Unified (embedded variable store) firmware for AMD SEV.
+          if [ "${EDK2_ARCH}" = "X64" ]; then
+              touch OvmfPkg/AmdSev/Grub/grub.efi
+
+              (
+              cat << EOF
+                  . ./edksetup.sh
+                  build -a X64 -t GCC -b RELEASE -p OvmfPkg/AmdSev/AmdSevX64.dsc \
+                    -DCC_MEASUREMENT_ENABLE=TRUE \
+                    -DNETWORK_IP4_ENABLE=TRUE \
+                    -DNETWORK_IP6_ENABLE=TRUE \
+                    -DNETWORK_TLS_ENABLE=TRUE \
+                    -DNETWORK_HTTP_BOOT_ENABLE=TRUE \
+                    -DTPM2_ENABLE=TRUE
+          EOF
+              ) | bash -e
+
+              cp Build/AmdSev/*/FV/OVMF.fd /usr/incus/share/qemu/OVMF.amdsev.fd
+          fi
+
       - name: Build libtpms
         run: |
           REPO="${PWD}"
@@ -547,6 +594,23 @@ jobs:
 
           go build -o "/usr/incus/bin/truenas_incus_ctl" truenas/truenas_incus_ctl
 
+      - name: Build virglrenderer
+        if: ${{ env.OS_NAME == 'debian-13' || env.OS_NAME == 'ubuntu-26.04' }}
+        run: |
+          cd /build/virglrenderer
+
+          meson setup build \
+                  --prefix=/usr/incus \
+                  --libdir=/usr/incus/lib \
+                  -Dplatforms=egl \
+                  -Ddrm-renderers=amdgpu-experimental,asahi,msm,panfrost-experimental,i915-experimental
+          meson compile -C build
+
+          mkdir -p /build/target/virglrenderer/
+          DESTDIR=/build/target/virglrenderer/ meson install -C build
+          rsync -a /build/target/virglrenderer/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/virglrenderer/usr/incus/lib/ /usr/incus/lib/
+
       - name: Build QEMU
         run: |
           REPO="${PWD}"
@@ -556,6 +620,12 @@ jobs:
           sed -i "s/^unset target_list$/target_list=\"x86_64-softmmu\"/" configure
 
           sed -i "/subdir('tests')/d" meson.build
+
+          opengl=""
+          if [ "${OS_NAME}" = "debian-13" ] || [ "${OS_NAME}" = "ubuntu-26.04" ]; then
+            opengl="--enable-opengl --enable-virglrenderer"
+          fi
+
           ./configure \
                   --prefix=/usr/incus \
                   --libexecdir=bin \
@@ -594,7 +664,8 @@ jobs:
                   --enable-vhost-kernel \
                   --enable-vhost-net \
                   --enable-vhost-user \
-                  --enable-virtfs
+                  --enable-virtfs \
+                  ${opengl}
           make
 
           mkdir /build/target/qemu/
@@ -738,6 +809,15 @@ jobs:
           else
             sed -i debian/control \
               -e "s/LIBNET1/libnet1/g"
+          fi
+
+          if [ "${PKGOS}" = "debian-13" ] || [ "${PKGOS}" = "ubuntu-26.04" ]; then
+            sed -i debian/control \
+              -e "s/^  LIBVIRGL,$/  libdrm-amdgpu1,\n  libdrm2,\n  libegl1,\n  libepoxy0,\n  libgbm1,/"
+            echo "usr/incus/lib/libvirglrenderer.so*" >> debian/incus.install
+          else
+            sed -i debian/control \
+              -e "/^  LIBVIRGL,$/d"
           fi
 
           dch --package incus --create -D ${CODENAME} -M -m "Automated Incus stable build" -v 1:$(echo ${INCUS_TAG} | sed -e "s/v//" -e "s/.0$//")-$(echo ${PKGOS} | sed "s/-//g")-$(date -u +%Y%m%d%H%M) --force-distribution

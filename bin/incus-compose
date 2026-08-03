@@ -1,0 +1,4 @@
+#!/bin/sh
+export PATH=/usr/incus/bin/:${PATH}
+export LD_LIBRARY_PATH=/usr/incus/lib/
+exec incus-compose "$@"

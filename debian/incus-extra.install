@@ -1,12 +1,14 @@
 usr/bin/distrobuilder
 usr/bin/fuidshift
 usr/bin/incus-benchmark
+usr/bin/incus-compose
 usr/bin/incus-migrate
 usr/bin/incus-simplestreams
 usr/bin/lxc-to-incus
 usr/incus/bin/distrobuilder
 usr/incus/bin/fuidshift
 usr/incus/bin/incus-benchmark
+usr/incus/bin/incus-compose
 usr/incus/bin/incus-migrate
 usr/incus/bin/incus-simplestreams
 usr/incus/bin/lxc-to-incus
