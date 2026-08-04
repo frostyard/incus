@@ -244,6 +244,12 @@ def _transform_install_deps(lines):
         if re.match(r'\s+iproute2 \\\s*$', line):
             indent = line[:len(line) - len(line.lstrip())]
             result.append(f'{indent}jq \\')
+        # Insert python3-yaml after python3-venv: virglrenderer's meson
+        # build needs it, and unlike upstream's Ubuntu runner image the
+        # bare debian:trixie container doesn't ship it.
+        if re.match(r'\s+python3-venv \\\s*$', line):
+            indent = line[:len(line) - len(line.lstrip())]
+            result.append(f'{indent}python3-yaml \\')
 
     # Swap pip install order: try --break-system-packages first (Trixie needs it)
     final = []

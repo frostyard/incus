@@ -136,6 +136,7 @@ jobs:
             python3-setuptools \
             python3-tomli \
             python3-venv \
+            python3-yaml \
             rsync \
             socat \
             uuid-dev \
