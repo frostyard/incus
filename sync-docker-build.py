@@ -4,7 +4,8 @@ Generate builds-docker.yml from builds.yml.
 
 Transforms the upstream multi-arch matrix build workflow into a single
 Debian Trixie amd64 build running in a Docker container on standard
-GitHub-hosted runners.
+GitHub-hosted runners. Builds of stable are then released on GitHub and
+published by frostyard/apt-publisher (see RELEASE_JOB_LINES).
 
 Run this whenever builds.yml is updated to sync changes:
     python3 sync-docker-build.py
@@ -155,6 +156,8 @@ def generate(env_lines, steps):
     out.extend([
         '      - name: Checkout code',
         '        uses: actions/checkout@v4',
+        '        with:',
+        '          persist-credentials: false',
         '',
     ])
 
@@ -183,7 +186,29 @@ def generate(env_lines, steps):
     # installed binaries are actually on PATH.
     out = [line.replace('/home/runner/', '/root/') for line in out]
 
+    # Pin the build job's actions, ours and upstream's, to commit SHAs.
+    out = [pin_action(line) for line in out]
+
     return out
+
+
+# Floating tags used by the build job, pinned to full commit SHAs
+# (frostyard/core ADR-0021). Each SHA is the commit the floating tag pointed
+# at when it was pinned, so pinning changed nothing that runs.
+PINNED_ACTIONS = {
+    'actions/checkout@v4':
+        'actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0',
+    'actions/upload-artifact@v4':
+        'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2',
+}
+
+
+def pin_action(line):
+    """Replace a floating `uses:` reference listed in PINNED_ACTIONS."""
+    m = re.match(r'(\s+(?:- )?uses: )(\S+)\s*$', line)
+    if m and m.group(2) in PINNED_ACTIONS:
+        return m.group(1) + PINNED_ACTIONS[m.group(2)]
+    return line
 
 
 # ---------------------------------------------------------------------------
@@ -435,55 +460,121 @@ def _remove_uname_aarch64_blocks(lines):
 
 
 # ---------------------------------------------------------------------------
-# Release job (Docker-only, hardcoded)
+# Release jobs (Docker-only, hardcoded)
 # ---------------------------------------------------------------------------
 
-RELEASE_JOB_LINES = [
-    '  release:',
-    '    runs-on: ubuntu-latest',
-    '    needs: build-incus',
-    '    permissions:',
-    '      contents: write # to create and upload assets to releases',
-    '      attestations: write # to upload assets attestation for build provenance',
-    '      id-token: write # grant additional permission to attestation action to mint the OIDC token permission',
-    '',
-    '    steps:',
-    '      - name: Checkout',
-    '        uses: actions/checkout@v4',
-    '        with:',
-    '          fetch-depth: 0',
-    '',
-    '      - name: Download Artifact',
-    '        uses: actions/download-artifact@v4',
-    '        with:',
-    '          name: debian-trixie-amd64',
-    '          path: ./dist',
-    '',
-    '      - name: Publish to frostyard repo',
-    '        uses: frostyard/repogen/.github/actions/publish-to-r2@v0.4.1',
-    '        with:',
-    '          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}',
-    '          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}',
-    '          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}',
-    '          r2-bucket: frostyardrepo',
-    '          purge-cache: "true"',
-    '          cloudflare-zone: ${{ secrets.CLOUDFLARE_ZONE }}',
-    '          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}',
-    '          gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}',
-    '          packages-dir: ./dist',
-    '          package-type: deb # or sysext',
-    '          base-url: https://repository.frostyard.org # required for sysext',
-    '',
-    '      - name: Kickoff snosi',
-    "        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
-    '        continue-on-error: true',
-    '        uses: peter-evans/repository-dispatch@v4',
-    '        with:',
-    '          token: ${{ secrets.ORG_PAT }}',
-    '          repository: frostyard/snosi',
-    '          event-type: build',
-]
+# Only pushes to (or runs dispatched on) stable in frostyard/incus release.
+# Every other branch, and any tag, stops after the build.
+#
+# The Debian packages are published by frostyard/apt-publisher, the single
+# Debian writer (frostyard/core ADR-0055): this workflow attaches them to a
+# GitHub release and requests publication. apt-publisher publishes every .deb
+# asset of the release, then dispatches `build` to frostyard/snosi once the
+# packages are installable (ADR-0056), so nothing here dispatches snosi.
+#
+# The release tag is the package version without its epoch, for example
+# 7.5.1-debian13-202610031200. The build job stamps the version with the UTC
+# minute, so every build gets a new tag.
+RELEASE_JOB_LINES = r"""
+  release:
+    if: github.repository == 'frostyard/incus' && github.ref == 'refs/heads/stable'
+    runs-on: ubuntu-latest
+    needs: build-incus
+    timeout-minutes: 20
+    permissions:
+      contents: write # create the release and its tag
+      attestations: write # store the build provenance attestations
+      id-token: write # sign the attestations with this workflow's identity
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
 
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: debian-trixie-amd64
+          path: ./dist
+
+      # apt-publisher publishes every .deb in the release, and it is
+      # registered for trixie only. The release must therefore hold exactly
+      # one complete Debian 13 amd64 build, and nothing else.
+      - name: Check the packages
+        id: check
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          want="incus incus-base incus-client incus-extra incus-ui-canonical"
+          version="" names=()
+          for deb in dist/*.deb; do
+            name=$(dpkg-deb -f "$deb" Package)
+            arch=$(dpkg-deb -f "$deb" Architecture)
+            v=$(dpkg-deb -f "$deb" Version)
+            size=$(stat -c %s "$deb")
+            if [[ $arch != amd64 ]]; then
+              echo "::error::$deb is built for $arch, not amd64"
+              exit 1
+            fi
+            if [[ ! $v =~ ^1:[0-9][0-9.]*-debian13-[0-9]{12}$ ]]; then
+              echo "::error::$deb has version $v, which is not a Debian 13 build"
+              exit 1
+            fi
+            if [[ -n $version && $v != "$version" ]]; then
+              echo "::error::$deb has version $v, but another package has $version"
+              exit 1
+            fi
+            if ((size >= 2147483648)); then
+              echo "::error::$deb is $size bytes; GitHub release assets must be under 2 GiB"
+              exit 1
+            fi
+            version=$v
+            names+=("$name")
+          done
+          got=$(printf '%s\n' "${names[@]}" | sort | paste -sd ' ')
+          if [[ $got != "$want" ]]; then
+            echo "::error::expected the packages: $want; found: ${got:-none}"
+            exit 1
+          fi
+          echo "tag=${version#1:}" >>"$GITHUB_OUTPUT"
+
+      # Binds each .deb to this workflow run. Verify with
+      # gh attestation verify FILE --repo frostyard/incus --source-ref refs/heads/stable
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.deb
+
+      # gh uploads the assets to a draft and publishes it once all are
+      # attached, so apt-publisher never sees a partial release. An existing
+      # tag fails this step instead of changing a published release.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/*.deb --target "$GITHUB_SHA" --latest \
+            --title "Incus $TAG" \
+            --notes "Debian 13 (trixie) amd64 build of stable at $GITHUB_SHA. frostyard/apt-publisher publishes it to https://repository.frostyard.org/debian/ (trixie)."
+
+  # Not continue-on-error: if the request fails, nothing was published and
+  # the run must fail. Re-running this job alone requests the same release
+  # again. codenames is explicit because these are Debian 13 builds whose
+  # version carries no ~deb13 marker.
+  request-publication:
+    runs-on: ubuntu-latest
+    needs: release
+    timeout-minutes: 5
+    permissions: {}
+
+    steps:
+      - name: Request APT publication
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4
+        with:
+          token: ${{ secrets.APT_PUBLISH_TOKEN }}
+          repository: frostyard/apt-publisher
+          event-type: publish-deb
+          client-payload: '{"repo": "${{ github.repository }}", "tag": "${{ needs.release.outputs.tag }}", "codenames": ["trixie"]}'
+""".strip('\n').split('\n')
 
 if __name__ == '__main__':
     main()
