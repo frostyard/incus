@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    # builds.yml comes from upstream (zabbly/incus). sync-docker-build.py reads
+    # its literal `uses:` lines to generate builds-docker.yml, so keep it
+    # unchanged. A bump in builds-docker.yml must also update PINNED_ACTIONS in
+    # sync-docker-build.py, or the next sync reverts it.
+    exclude-paths:
+      - ".github/workflows/builds.yml"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
