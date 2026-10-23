@@ -35,6 +35,7 @@ jobs:
       run: |
         set -x
         [ "${TARGET}" = "daily" ] && exit 0
+        [ "${TARGET}" = "stable" ] && exit 0
 
         echo "Invalid branch target: ${TARGET}"
         exit 1
