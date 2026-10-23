@@ -4,19 +4,39 @@ on:
     - cron: '0 6 * * 1' # Monday 6am UTC
   workflow_dispatch:
 
+# The job never pushes to stable. It merges upstream/stable into the
+# sync/upstream-stable branch and opens (or updates) one PR into stable.
+# A person reviews and merges that PR with a merge commit.
+#
+# GITHUB_TOKEN only reads (checkout). ORG_PAT is used in the
+# "Push sync branch" and "Open or update PR" steps only, because:
+# - upstream changes .github/workflows/builds.yml and the job regenerates
+#   builds-docker.yml; GITHUB_TOKEN cannot push workflow file changes;
+# - pushes and PRs made with GITHUB_TOKEN do not start other workflows, so
+#   Commits (DCO, branch target) and Build (Docker) would not run on the PR.
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  SYNC_BRANCH: sync/upstream-stable
+  BASE_BRANCH: stable
+  UPSTREAM_URL: https://github.com/zabbly/incus.git
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: stable
+          ref: ${{ env.BASE_BRANCH }}
           fetch-depth: 0
-          token: ${{ secrets.ORG_PAT }}
+          persist-credentials: false
 
       - name: Configure git
         run: |
@@ -24,20 +44,118 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Merge upstream stable
+        id: merge
         run: |
-          git remote add upstream https://github.com/zabbly/incus.git
-          git fetch upstream stable
-          git merge upstream/stable --no-edit
+          set -euo pipefail
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch --no-tags upstream stable
+          git fetch --no-tags origin "+refs/heads/${SYNC_BRANCH}:refs/remotes/origin/${SYNC_BRANCH}" || true
+
+          upstream_sha=$(git rev-parse upstream/stable)
+          echo "upstream_sha=${upstream_sha}" >> "$GITHUB_OUTPUT"
+
+          if git merge-base --is-ancestor upstream/stable HEAD; then
+            echo "${BASE_BRANCH} already contains upstream/stable (${upstream_sha})."
+          elif ! git merge --no-ff --signoff --no-edit \
+                -m "Merge upstream/stable (${upstream_sha:0:12}) into ${BASE_BRANCH}" \
+                upstream/stable; then
+            conflicts=$(git diff --name-only --diff-filter=U)
+            git merge --abort
+            {
+              echo "## Sync Upstream: merge conflict"
+              echo
+              echo "upstream/stable (${upstream_sha}) does not merge cleanly into ${BASE_BRANCH}."
+              echo "No PR was opened or updated. Merge it by hand on a branch and open a PR."
+              echo
+              echo "Conflicting files:"
+              echo '```'
+              echo "${conflicts}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Merge conflict::upstream/stable (${upstream_sha}) conflicts with ${BASE_BRANCH} in: $(printf '%s' "${conflicts}" | tr '\n' ' '). No PR was opened. Merge by hand."
+            exit 1
+          fi
 
       - name: Regenerate Docker build workflow
         run: python3 sync-docker-build.py
 
-      - name: Commit and push
+      - name: Commit regenerated workflow
+        id: commit
         run: |
+          set -euo pipefail
           git add .github/workflows/builds-docker.yml
           if git diff --cached --quiet; then
-            echo "No changes to commit"
+            echo "builds-docker.yml is unchanged."
           else
-            git commit -m "chore: sync builds-docker.yml from upstream"
+            git commit --signoff -m "chore: sync builds-docker.yml from upstream"
           fi
-          git push
+
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/${BASE_BRANCH}")" ]; then
+            echo "Nothing to sync: ${BASE_BRANCH} is up to date." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          # Do not rewrite the sync branch when it already has the same
+          # content on top of the current base and upstream: a needless
+          # force-push dismisses reviews and restarts CI.
+          remote="origin/${SYNC_BRANCH}"
+          if git rev-parse --verify --quiet "$remote" >/dev/null \
+             && git merge-base --is-ancestor "origin/${BASE_BRANCH}" "$remote" \
+             && git merge-base --is-ancestor upstream/stable "$remote" \
+             && git diff --quiet HEAD "$remote"; then
+            echo "${SYNC_BRANCH} is already current."
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          {
+            echo "incus_tag=$(sed -n 's/^ *INCUS_TAG: *"\(.*\)"/\1/p' .github/workflows/builds.yml | head -n1)"
+            echo "lease=$(git rev-parse --verify --quiet "$remote" || true)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Push sync branch
+        if: steps.commit.outputs.changed == 'true' && steps.commit.outputs.push == 'true'
+        env:
+          GH_PUSH_TOKEN: ${{ secrets.ORG_PAT }}
+          LEASE: ${{ steps.commit.outputs.lease }}
+        run: |
+          set -euo pipefail
+          # The sync branch belongs to this job. --force-with-lease refuses
+          # to overwrite it if it moved since the fetch above.
+          git push --force-with-lease="refs/heads/${SYNC_BRANCH}:${LEASE}" \
+            "https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${SYNC_BRANCH}"
+
+      - name: Open or update PR
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ORG_PAT }}
+          UPSTREAM_SHA: ${{ steps.merge.outputs.upstream_sha }}
+          INCUS_TAG: ${{ steps.commit.outputs.incus_tag }}
+        run: |
+          set -euo pipefail
+          title="Sync upstream zabbly/incus stable (Incus ${INCUS_TAG:-unknown})"
+          body=$(cat <<EOF
+          Automated merge of [zabbly/incus](https://github.com/zabbly/incus) \`stable\` at ${UPSTREAM_SHA} into \`${BASE_BRANCH}\`, with \`builds-docker.yml\` regenerated by \`sync-docker-build.py\`.
+
+          Opened by the [Sync Upstream](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) workflow. The next run updates this PR in place.
+
+          - Review the upstream changes, especially \`.github/workflows/builds.yml\` and \`builds-docker.yml\`.
+          - Merge with **Create a merge commit** (not squash or rebase), so \`${BASE_BRANCH}\` keeps the upstream history and the next sync merges cleanly.
+          - The merge to \`${BASE_BRANCH}\` builds, releases and publishes the Debian package.
+          EOF
+          )
+
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$BASE_BRANCH" \
+                 --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+            echo "Updated PR #${pr}." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            url=$(gh pr create --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$BASE_BRANCH" \
+                    --title "$title" --body "$body")
+            echo "Opened ${url}." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
