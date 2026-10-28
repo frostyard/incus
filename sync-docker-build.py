@@ -472,6 +472,11 @@ def _remove_uname_aarch64_blocks(lines):
 # asset of the release, then dispatches `build` to frostyard/snosi once the
 # packages are installable (ADR-0056), so nothing here dispatches snosi.
 #
+# These builds replace Debian's incus packages, so apt-publisher publishes
+# them in the `image` component, which only Frostyard image builds enable
+# (core ADR-0059). apt-publisher sets the component from its registration of
+# this repository; the publish-deb payload names none.
+#
 # The release tag is the package version without its epoch, for example
 # 7.5.1-debian13-202610031200. The build job stamps the version with the UTC
 # minute, so every build gets a new tag.
@@ -496,8 +501,9 @@ RELEASE_JOB_LINES = r"""
           path: ./dist
 
       # apt-publisher publishes every .deb in the release, and it is
-      # registered for trixie only. The release must therefore hold exactly
-      # one complete Debian 13 amd64 build, and nothing else.
+      # registered for trixie only, in the image component. The release must
+      # therefore hold exactly one complete Debian 13 amd64 build, and
+      # nothing else.
       - name: Check the packages
         id: check
         run: |
@@ -554,12 +560,14 @@ RELEASE_JOB_LINES = r"""
         run: |
           gh release create "$TAG" dist/*.deb --target "$GITHUB_SHA" --latest \
             --title "Incus $TAG" \
-            --notes "Debian 13 (trixie) amd64 build of stable at $GITHUB_SHA. frostyard/apt-publisher publishes it to https://repository.frostyard.org/debian/ (trixie)."
+            --notes "Debian 13 (trixie) amd64 build of stable at $GITHUB_SHA. frostyard/apt-publisher publishes it to https://repository.frostyard.org/debian/ (trixie, component image)."
 
   # Not continue-on-error: if the request fails, nothing was published and
   # the run must fail. Re-running this job alone requests the same release
   # again. codenames is explicit because these are Debian 13 builds whose
-  # version carries no ~deb13 marker.
+  # version carries no ~deb13 marker. The payload names no component:
+  # apt-publisher puts this repository's packages in the component it is
+  # registered for, image (core ADR-0059).
   request-publication:
     runs-on: ubuntu-latest
     needs: release
