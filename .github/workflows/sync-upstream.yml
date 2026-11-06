@@ -8,12 +8,17 @@ on:
 # sync/upstream-stable branch and opens (or updates) one PR into stable.
 # A person reviews and merges that PR with a merge commit.
 #
-# GITHUB_TOKEN only reads (checkout). ORG_PAT is used in the
+# GITHUB_TOKEN only reads (checkout). UPSTREAM_SYNC_TOKEN is used in the
 # "Push sync branch" and "Open or update PR" steps only, because:
 # - upstream changes .github/workflows/builds.yml and the job regenerates
 #   builds-docker.yml; GITHUB_TOKEN cannot push workflow file changes;
 # - pushes and PRs made with GITHUB_TOKEN do not start other workflows, so
 #   Commits (DCO, branch target) and Build (Docker) would not run on the PR.
+# UPSTREAM_SYNC_TOKEN is a fine-grained PAT owned by the machine account
+# frostyard-machines, with access to this repository only: Contents, Pull
+# requests and Workflows read and write. A sync PR that this token creates
+# therefore has the author frostyard-machines, and a maintainer approves it
+# under the default-branch ruleset. An update keeps an open PR's author.
 permissions:
   contents: read
 
@@ -119,7 +124,7 @@ jobs:
       - name: Push sync branch
         if: steps.commit.outputs.changed == 'true' && steps.commit.outputs.push == 'true'
         env:
-          GH_PUSH_TOKEN: ${{ secrets.ORG_PAT }}
+          GH_PUSH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
           LEASE: ${{ steps.commit.outputs.lease }}
         run: |
           set -euo pipefail
@@ -132,7 +137,7 @@ jobs:
       - name: Open or update PR
         if: steps.commit.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.ORG_PAT }}
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
           UPSTREAM_SHA: ${{ steps.merge.outputs.upstream_sha }}
           INCUS_TAG: ${{ steps.commit.outputs.incus_tag }}
         run: |
