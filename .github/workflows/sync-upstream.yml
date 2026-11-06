@@ -16,9 +16,9 @@ on:
 #   Commits (DCO, branch target) and Build (Docker) would not run on the PR.
 # UPSTREAM_SYNC_TOKEN is a fine-grained PAT owned by the machine account
 # frostyard-machines, with access to this repository only: Contents, Pull
-# requests and Workflows read and write. The sync PR's author is therefore
-# frostyard-machines, and a maintainer approves it under the default-branch
-# ruleset.
+# requests and Workflows read and write. A sync PR that this token creates
+# therefore has the author frostyard-machines, and a maintainer approves it
+# under the default-branch ruleset. An update keeps an open PR's author.
 permissions:
   contents: read
 
