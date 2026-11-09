@@ -116,6 +116,8 @@ def generate(env_lines, steps):
         'name: Build (Docker)',
         'on:',
         '  push:',
+        '    branches: [stable]',
+        '  pull_request:',
         '  workflow_dispatch:',
         '',
         'permissions:',

@@ -1,6 +1,8 @@
 name: Build (Docker)
 on:
   push:
+    branches: [stable]
+  pull_request:
   workflow_dispatch:
 
 permissions:
