@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "default_level": "L3",
+  "paths": [
+    { "glob": ".github/risk-paths.json", "level": "L2", "why": "governance: the risk-path list that sets the level labels and risk:high" },
+    { "glob": ".github/workflows/risk-paths.yml", "level": "L2", "why": "governance: the caller of core's pr-triage workflow" },
+    { "glob": ".github/workflows/builds-docker.yml", "level": "L1", "why": "publication: builds, releases and attests the Debian 13 packages and requests APT publication" },
+    { "glob": "sync-docker-build.py", "level": "L1", "why": "publication: generates builds-docker.yml with its release and publication jobs" },
+    { "glob": ".github/workflows/sync-upstream.yml", "level": "L1", "why": "secrets and credentials: uses UPSTREAM_SYNC_TOKEN, which pushes workflow changes" },
+    { "glob": "debian/*.{postinst,postrm,prerm}", "level": "L1", "why": "destructive operations: maintainer scripts that run as root at install and removal" },
+    { "glob": "patches/edk2-*", "level": "L1", "why": "boot chain: patches to the EDK2 firmware that VMs boot (Secure Boot)" },
+    { "glob": "zabbly-sb.oem.crt", "level": "L1", "why": "signing and keys: the Secure Boot OEM certificate" }
+  ]
+}
