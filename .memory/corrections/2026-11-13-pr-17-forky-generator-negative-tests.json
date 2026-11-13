@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "forky-generator",
+  "correction": "A fail-closed rewrite in sync-docker-build.py and each release Check the packages script need committed negative tests: a missing upstream pattern must stop the generator, and a wrong package set must fail the check, in tests/test_sync_docker_build.py, run by the Generator workflow.",
+  "evidence": "incus#17, cross-review (openai/gpt-6.1-sol) of head 515f53a, finding B1",
+  "promoted_to": "tests/test_sync_docker_build.py"
+}

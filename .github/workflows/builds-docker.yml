@@ -927,6 +927,922 @@ jobs:
           name: debian-trixie-amd64
           path: out/*
 
+  build-incus-forky:
+    name: Build Incus (Debian Forky)
+    runs-on: ubuntu-latest
+    container:
+      image: debian:forky
+
+    env:
+      OS_ARCH: "amd64"
+      OS_NAME: "debian-14"
+      HOME: "/root/"
+      PKG_CONFIG_PATH: "/usr/incus/lib/pkgconfig/"
+      CGO_LDFLAGS: "-L/usr/incus/lib/"
+      CGO_CFLAGS: "-I/usr/incus/include/"
+      LD_LIBRARY_PATH: "/usr/incus/lib/"
+      CPATH: "/usr/incus/include/"
+      PATH: "/root/.cargo/bin:/root/.local/bin:/usr/incus/bin:/usr/local/go/bin:/usr/local/node/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
+
+      # Linux Containers projects
+      DISTROBUILDER_TAG: "distrobuilder-3.2"
+      INCUS_COMPOSE_TAG: "v1.3.5"
+      INCUS_TAG: "v7.6.0"
+      INCUS_UI_CANONICAL_TAG: "incus-0.22.1"
+      LXCFS_TAG: "v7.0.0"
+      LXC_TAG: "v7.0.0"
+
+      # External dependencies
+      COWSQL_TAG: "v1.15.9"
+      CRIU_TAG: "v4.3"
+      EDK2_TAG: "edk2-stable202608"
+      GOLANG_TAG: "go1.27.3"
+      LEGO_TAG: "v4.35.2"
+      LIBTPMS_TAG: "v0.10.2"
+      LIBURING_TAG: "liburing-2.15"
+      NASM_TAG: "nasm-2.16.03"
+      NVIDIA_CONTAINER_TAG: "v1.20.1"
+      QEMU_TAG: "v11.1.3"
+      RAFT_TAG: "v0.22.1"
+      SEABIOS_TAG: "rel-1.17.0"
+      SKOPEO_TAG: "v1.24.1"
+      SWTPM_TAG: "v0.10.2"
+      TRUENAS_INCUS_CTL_TAG: "v0.7.7"
+      VIRGLRENDERER_TAG: "1.3.0"
+      VIRTIOFSD_TAG: "v1.14.0"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Migrate to /usr/incus
+        run: ./migrate-to-usr-incus.sh
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends --yes \
+            acpica-tools \
+            asciidoc \
+            autoconf \
+            automake \
+            awscli \
+            bison \
+            bmake \
+            build-essential \
+            curl \
+            debhelper \
+            devscripts \
+            dosfstools \
+            expect \
+            flex \
+            gawk \
+            gettext \
+            gnutls-bin \
+            gnutls-dev \
+            git \
+            iproute2 \
+            jq \
+            libacl1-dev \
+            libaio-dev \
+            libapparmor-dev \
+            libbtrfs-dev \
+            libcap-dev \
+            libcap-ng-dev \
+            libdbus-1-dev \
+            libdevmapper-dev \
+            libelf-dev \
+            libfuse3-dev \
+            libglib2.0-dev \
+            libgnutls28-dev \
+            libgpgme-dev \
+            libjson-glib-dev \
+            libnet1-dev \
+            libnl-3-dev \
+            libnuma-dev \
+            libpam0g-dev \
+            libpixman-1-dev \
+            libpng-dev \
+            libprotobuf-c-dev \
+            libprotobuf-dev \
+            librbd-dev \
+            libseccomp-dev \
+            libselinux1-dev \
+            libspice-server-dev \
+            libsqlite3-dev \
+            libssl-dev \
+            libsystemd-dev \
+            libtirpc-dev \
+            libtool \
+            libudev-dev \
+            libusb-1.0-0-dev \
+            libusbredirhost-dev \
+            libuv1-dev \
+            lsb-release \
+            mtools \
+            ninja-build \
+            pipx \
+            pkg-config \
+            protobuf-c-compiler \
+            protobuf-compiler \
+            python3-cryptography \
+            python3-jinja2 \
+            python3-pexpect \
+            python3-pip \
+            python3-setuptools \
+            python3-tomli \
+            python3-venv \
+            python3-yaml \
+            rpcsvc-proto \
+            rsync \
+            socat \
+            uuid-dev \
+            xmlto \
+            xorriso
+
+          if [ "${OS_NAME}" = "debian-13" ] || [ "${OS_NAME}" = "debian-14" ]; then
+            apt-get install --no-install-recommends --yes \
+                libdrm-dev \
+                libegl1-mesa-dev \
+                libgbm-dev \
+                libepoxy-dev
+          fi
+
+          apt-get install --no-install-recommends --yes systemd-dev || true
+
+          pipx install meson
+
+      - name: Configure git
+        run: |
+          git config --global --add advice.detachedHead false
+          git config --global user.email "noreply@zabbly.com"
+          git config --global user.name "Zabbly Incus build"
+
+      - name: Install Go
+        run: |
+          curl -sL "https://go.dev/dl/${GOLANG_TAG}.linux-${OS_ARCH}.tar.gz" | tar -C /usr/local/ -zx
+          go version
+
+      - name: Install Rust
+        run: |
+          curl -sL https://sh.rustup.rs -o install-rust.sh
+          bash install-rust.sh -y
+
+      - name: Install Node
+        run: |
+          mkdir /usr/local/node/
+          curl -sL "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz" | tar -C /usr/local/node/ -Jx --strip-components=1
+
+      - name: Build environment
+        run: |
+          mkdir -p /build/ /opt/
+          chown $(id -u):$(id -g) /build/ /opt/
+
+          mkdir -p \
+            /usr/incus/bin/ \
+            /usr/incus/include/ \
+            /usr/incus/lib/ \
+            /usr/incus/lib/systemd \
+            /usr/incus/share/
+
+      - name: Get the code
+        run: |
+          PIDS=""
+          bg() {
+              "$@" &
+              PIDS="${PIDS} $!"
+          }
+
+          bg git clone https://github.com/lxc/distrobuilder /build/distrobuilder --depth 1 -b "${DISTROBUILDER_TAG}"
+          bg git clone https://github.com/lxc/lxc /build/lxc -b "${LXC_TAG}"
+          bg git clone https://github.com/lxc/lxcfs /build/lxcfs --depth 1 -b "${LXCFS_TAG}"
+          bg git clone https://github.com/lxc/incus /build/incus -b "${INCUS_TAG}"
+          bg git clone https://github.com/lxc/incus-compose /build/incus-compose --depth 1 -b "${INCUS_COMPOSE_TAG}"
+          bg git clone https://github.com/zabbly/incus-ui-canonical /build/incus-ui-canonical --depth 1 -b "${INCUS_UI_CANONICAL_TAG}"
+
+          bg git clone https://github.com/axboe/liburing /build/liburing --depth 1 -b "${LIBURING_TAG}"
+          bg git clone https://github.com/checkpoint-restore/criu /build/criu --depth 1 -b "${CRIU_TAG}"
+          bg git clone https://github.com/containers/skopeo /build/skopeo --depth 1 -b "${SKOPEO_TAG}"
+          bg git clone https://github.com/cowsql/cowsql /build/cowsql --depth 1 -b "${COWSQL_TAG}"
+          bg git clone https://github.com/cowsql/raft /build/raft --depth 1 -b "${RAFT_TAG}"
+          bg git clone https://github.com/go-acme/lego /build/lego --depth 1 -b "${LEGO_TAG}"
+          bg git clone https://github.com/NVIDIA/libnvidia-container /build/libnvidia-container --depth 1 -b "${NVIDIA_CONTAINER_TAG}"
+          bg git clone https://github.com/stefanberger/libtpms /build/libtpms --depth 1 -b "${LIBTPMS_TAG}"
+          bg git clone https://github.com/stefanberger/swtpm /build/swtpm --depth 1 -b "${SWTPM_TAG}"
+          bg git clone https://github.com/tianocore/edk2 /build/edk2 --recurse-submodules --shallow-submodules --depth 1 -b "${EDK2_TAG}"
+          bg git clone https://github.com/truenas/truenas_incus_ctl /build/truenas_incus_ctl --depth 1 -b "${TRUENAS_INCUS_CTL_TAG}"
+          bg git clone https://gitlab.com/qemu-project/qemu /build/qemu --depth 1 -b "${QEMU_TAG}"
+          bg git clone https://gitlab.com/qemu-project/seabios /build/seabios --depth 1 -b "${SEABIOS_TAG}"
+          bg git clone https://gitlab.com/virtio-fs/virtiofsd /build/virtiofsd --depth 1 -b "${VIRTIOFSD_TAG}"
+
+          if [ "${OS_NAME}" = "debian-13" ] || [ "${OS_NAME}" = "debian-14" ]; then
+            bg git clone https://gitlab.freedesktop.org/virgl/virglrenderer /build/virglrenderer --depth 1 -b "${VIRGLRENDERER_TAG}"
+          fi
+
+          mkdir /build/nasm/
+          curl -sL "https://www.nasm.us/pub/nasm/releasebuilds/$(echo ${NASM_TAG} | cut -d- -f2)/${NASM_TAG}.tar.gz" --resolve www.nasm.us:443:198.137.202.136 | tar -C /build/nasm/ -zx --strip-components=1 &
+          PIDS="${PIDS} $!"
+
+          for pid in ${PIDS}; do
+              wait "${pid}"
+          done
+
+      - name: Build liburing
+        run: |
+          cd /build/liburing
+          ./configure --prefix=/usr/incus
+          make -j"$(nproc)"
+
+          mkdir -p /build/target/liburing/
+          DESTDIR=/build/target/liburing make install
+          rsync -a /build/target/liburing/usr/incus/include/* /usr/incus/include/
+          rsync -a /build/target/liburing/usr/incus/lib/* /usr/incus/lib/
+
+      - name: Build raft
+        run: |
+          cd /build/raft
+          autoreconf -i
+          ./configure --prefix=/usr/incus
+          make -j"$(nproc)"
+
+          mkdir -p /build/target/raft/
+          DESTDIR=/build/target/raft/ make install
+          rsync -a /build/target/raft/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/raft/usr/incus/lib/ /usr/incus/lib/
+
+      - name: Build cowsql
+        run: |
+          REPO="${PWD}"
+
+          cd /build/cowsql
+          patch -p1 < "${REPO}/patches/cowsql-0001-discarded-qualifiers.patch"
+
+          autoreconf -i
+          ./configure --prefix=/usr/incus
+          make -j"$(nproc)"
+
+          mkdir -p /build/target/cowsql/
+          DESTDIR=/build/target/cowsql/ make install
+          rsync -a /build/target/cowsql/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/cowsql/usr/incus/lib/ /usr/incus/lib/
+
+      - name: Build LXC
+        run: |
+          REPO="${PWD}"
+
+          cd /build/lxc
+
+          meson setup build \
+                  --prefix=/usr/incus \
+                  --libdir=/usr/incus/lib \
+                  -Dexamples=false \
+                  -Dman=false \
+                  -Dtools=false \
+                  -Dtests=false \
+                  -Dmemfd-rexec=false \
+                  -Dapparmor=true \
+                  -Dseccomp=true \
+                  -Dselinux=true \
+                  -Dcapabilities=true \
+                  -Dio-uring-event-loop=false
+          meson compile -C build
+
+          mkdir -p /build/target/lxc/
+          DESTDIR=/build/target/lxc/ meson install -C build
+          rsync -a /build/target/lxc/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/lxc/usr/incus/lib/ /usr/incus/lib/
+          mkdir -p /usr/incus/share/lxc/config/common.conf.d/
+          mkdir -p /usr/incus/share/lxc/hooks/
+          cp /build/target/lxc/usr/incus/share/lxc/hooks/nvidia /usr/incus/share/lxc/hooks/
+
+      - name: Build LXCFS
+        run: |
+          REPO="${PWD}"
+
+          cd /build/lxcfs
+          meson setup build \
+                  --prefix=/usr/incus \
+                  --libdir=/usr/incus/lib \
+                  -Ddocs=false \
+                  -Dtests=false
+          meson compile -C build
+
+          mkdir -p /build/target/lxcfs/
+          DESTDIR=/build/target/lxcfs/ meson install -C build
+          rsync -a /build/target/lxcfs/usr/incus/bin/ /usr/incus/bin/
+          rsync -a /build/target/lxcfs/usr/incus/share/ /usr/incus/share/
+          rsync -a /build/target/lxcfs/usr/incus/lib/ /usr/incus/lib/
+
+          sed -i "s#/var/lib/lxcfs#/var/lib/incus-lxcfs#g" /usr/incus/share/lxcfs/lxc.mount.hook
+          patch -p1 /usr/incus/share/lxcfs/lxc.mount.hook < "${REPO}/patches/lxcfs-0001-hook.patch"
+
+      - name: Build Incus
+        run: |
+          REPO="${PWD}"
+
+          cd /build/incus
+
+          git cherry-pick e87de0c24f48592f0fa534b26d12180bc9d3736c  # test: Fix NVRAM check
+          git cherry-pick de89fc4068b3afb51a40c0f06600e37a395627ed  # internal/server/device: Ignore already closed DHCP sockets
+          git cherry-pick 43f1d9bac495f56ecb22be43e0761b472ef04476  # cmd/incusd: Ignore missing temporary image files
+          git cherry-pick 8dd8fd55977d5f373487212337cf58076879c346  # doc/rest-api: Refresh swagger YAML
+          git cherry-pick d34562e45efe62c8c31523f7c82a508d13f68219  # client: Only probe Unix sockets when several exist
+          git cherry-pick ef9a103401c19d26a3def929c310eadfa376bfea  # incus-user: Serialize user setup across connections
+          git cherry-pick 9e38b4e24254d8c853838ec86d0df7b1ee022dbc  # incusd/instance/qemu: Always report host TPM state
+          git cherry-pick 1486ac847898376efe5d0113633c823380fdd010  # incusd/storage: Fix volume used_by across projects
+          git cherry-pick 02125a285b8ad5bd3297c6de7d666169e62523a4  # tests: Check volume used_by across projects
+          git cherry-pick 06686a6a5ccff31945d8f2dd30edd58e56f52596  # incusd/instance/lxc: Keep the instance idmap across snapshots
+          git cherry-pick a4158368f5d1964e373229181b6be29366c92604  # incusd/project: Replace snapshot idmap allocation keys on restore
+          git cherry-pick c491063da74bb783a7dc958e1c56530dc107be4d  # tests: Check isolated snapshot restore in restricted projects
+          git cherry-pick a1edc8d1995e1b12ef3cf56f6ee7f3f012b7f040  # Update gomod
+          git cherry-pick 6f34ec1f07d2bc94f38cc7af9316fe8127f5c36f  # incusd/project: Merge existing config on PATCH
+          git cherry-pick 2487aacfee21834819e5caa46676e6f2e262c93c  # tests: Check project config PATCH
+          git cherry-pick f1b8e20d1b8ffec8066390cd32552bc46fbcd970  # incusd/instance/qmp: Skip error message when already disconnected
+          git cherry-pick 6ec0c834bd4a24d5dde9a0e8662e42d7d52dc1fc  # incusd/storage/linstor: Handle leftover resource definitions on create and delete
+          git cherry-pick 8bdbd128878c4c5615cb8ac5459179576e00b55e  # incus-agent: Catch the clock up with the host's time when it connects
+          git cherry-pick b2368edb5eb0aa1f06c02c4534c487b5459f6a7d  # incusd/instance/qemu: Send the host time to the agent and reconnect after a stateful start
+          git cherry-pick db7ea7d6d840cfeefce792abeedb4e078c924a47  # incusd/storage_volumes: Rename and move dependent volumes before updating users
+          git cherry-pick f4ab362f223bd5f6318af615f17bdf2eee897b48  # tests: Rename and move dependent volumes
+          git cherry-pick c0096076949bff06f747707190fb75544d7377d0  # incusd: Read the USB serial from sysfs on hotplug
+          git cherry-pick 8e12d6d2c184c15c44f6d98013fb678f43fafcf8  # incusd/device/usb: Match serial devices on removal by bus and device number
+          git cherry-pick 8d8cf9c38648afffeecf8aa7046f69faee728a05  # incus/exec: Don't read a terminal from a background process group
+          git cherry-pick 8a1e95150297e36c8c30aedd8b8af5aa1ccaa1b2  # incusd/mirror: Add a way to drop mirrors without a final sync
+          git cherry-pick 01a5439a35e7d842e946678aa129b13d2396afdf  # internal/linux: Add a helper listing the writers on a mount
+          git cherry-pick 7612887ec222162c03459208fa71a9156a517911  # incusd/migration: Add dirtyBitmaps to the migration header
+          git cherry-pick 48f81f2ad804d69509665c1f44797b3737008846  # incusd/migration: Update protobuf
+          git cherry-pick 00a45fe91491a8d165fa9c2ceacf2d481a03ba3d  # incusd/storage/drivers: Fall back to a full e2fsck when preen mode gives up
+          git cherry-pick 42cb585e322a8fa41c95990e01595ecaad51346d  # incusd/instance/qemu: Run the metadata images from a local copy
+          git cherry-pick 7680ee660051d72ed0e769bd9563d3af50f84539  # incusd/instance/qemu: Drop the local state copies once a move is committed
+          git cherry-pick 8657d26b4084560d355b76b480e27cc87ad45724  # incusd/instance/qemu: Refuse live moves when the config volume stays writable
+          git cherry-pick a49be428eadcfaf47adfb26c5ffa3cb43d6b4c88  # incusd/instance/qemu: Migrate persistent bitmaps with the VM state
+          git cherry-pick 65da1e4129b82381c195396e498e257c845127a0  # incus-simplestreams: Avoid a double slash in the default alias
+          git cherry-pick 210b6c932a8c9270af4c7852784495bbd2e10e3a  # Update gomod
+          git cherry-pick 597fc7ae862d60a2ed3f414f10dd11e2112fd9f2  # incusd/storage: Clean up after a failed instance creation
+          git cherry-pick 1fec5721f472f9e0101b4ae65a43af4d98259d68  # incusd/instance/lxc: Wait for the stop hook of an exited instance
+          git cherry-pick 4dcaaab80c68c848cdb8759bf4c6257f0522b84b  # incusd/db/cluster: Add bulk instance profile loader
+          git cherry-pick 69e8df4a7f0a328b16b49476aaae0a558df66d33  # incusd/db/cluster: Accept prefetched instance config and profiles
+          git cherry-pick ca10430366933b03f272fca6e2f2b5e49f0848ce  # incusd/scriptlet: Load instances in bulk
+          git cherry-pick a7dac83d1694ec81b6fb23c24df9ed79268c12cb  # incusd/project: Load instances in bulk for limit checks
+          git cherry-pick 39023763f7a9691eb1bee9db442bf4108b9da7d8  # incusd/cluster: Give the placement scriptlet ten seconds
+          git cherry-pick de47821ea8ebb2c3e1cbd79ad3ea90cefeb6fa4e  # tests: Check instance listing in placement scriptlet
+          git cherry-pick 4b522df5a735761a10e7457d6c240bb0ccef934d  # incusd: Run container hooks without the database
+          git cherry-pick 4cd8d6e5af8e94a596f6eb9bab188e37e1bd0b24  # incusd: Let empty import overrides unset config and device keys
+          git cherry-pick 10aea863304711a2c344ca54d5f2dd908fd16eae  # tests: Check config and device overrides on import
+          git cherry-pick e11b0b075202a2d757d35105c5d49851160cc0bc  # incus/import: Add examples for overriding config and devices
+          git cherry-pick 966d2792d9453851b3fd9ba2393dcd2ba74d5271  # doc: Describe import overrides for instances exported from other servers
+          git cherry-pick 313af7713d9febca9ca9ca5b4df3fc283506fd2e  # incus-agent: Fix the clock step on 32-bit targets
+          git cherry-pick 15ce09940427b334729087324afbb84165444f37  # doc: Update release branch references
+          git cherry-pick bd62cb7d631b49b6da7bd22fbae63eef4fa39cdc  # incusd/storage/lvm: Move the sanlock global lock recovery to a helper
+          git cherry-pick 2fcd9c188e5bd3130767a9d076d5b240ee69e5f2  # incusd/storage/lvm: Clean up stale sanlock lease volumes on pool delete
+          git cherry-pick c75facf4ea7e0e367dc69d098f738e8fe4b086e5  # incusd/storage/lvm: Use PathNameEncode for volume name escaping
+          git cherry-pick 1ff2d215560958aa5529a43001aaba4999794621  # client: Fix data race on skipEvents
+          git cherry-pick 32ffc154a4145656e74f88d66730e742e03ea24b  # incusd/apparmor: Allow QEMU access to the metadata images
+          git cherry-pick f9eff01a905d6a8b1e77e05808903d06b04ec3ea  # incusd/device/nic_routed: Add the host routes once a VM runs and replace existing ones
+          git cherry-pick e3bd565459e0ed9a6790802b73a181d2162f1e37  # incusd/instance/qemu: Restore the volatile config when an incoming move fails
+          git cherry-pick a19db1384097311a10539e5c82a3b0d7f3c8d386  # incusd/instance/qemu: Resync the agent clock whenever the guest is resumed
+          git cherry-pick d61ee0638c8c7723f84479e49e0e33ef5713167a  # incusd/storage/linstor: Don't attach a volume just to check its size
+          git cherry-pick fdbe26396a2ac0b35624e56d028b77e0c500f43d  # incusd/storage/linstor: Grow the volume as part of the clone
+          git cherry-pick 1ce4fa50bf748e257dc6d4bfc8253ed77a30064d  # incusd/storage: Mount the instance once when creating it from an image
+          git cherry-pick c65b7f0954153274e722e60c94917aa3f3a095e5  # incusd/storage/drivers: Expose extended L2 flag in qcow2 info
+          git cherry-pick 59c89548c9a750785ddde5f1cd6ba118b335b66a  # incusd/instance/qmp: Add block node file query
+          git cherry-pick d37221cca975a4d3f3654e31adb3a58c2abf8a15  # incusd/instance/qemu: Size the qcow2 L2 cache from the file size and memory limit
+          git cherry-pick 41050e2ed806e5eb96c3c7aa5412ea0da0911c37  # incusd/cluster: Heal members that died during an evacuation
+          git cherry-pick abc0c0a2013d62adc4450e7e7b9bffc9916b261b  # tests: Cover healing of a member left evacuating
+          git cherry-pick fa054468f5063b1680e4e6b5d8702eeaa0dddc53  # incusd/db: Don't report all members as offline on leader loss
+          git cherry-pick 33f82b856ad8603cc8664639f3638cfc81a0eb7b  # Update gomod
+          git cherry-pick ff7514dadbd77e4a3e7f103abce903c050c292c3  # shared/subprocess: Flush pid files before renaming them
+          git cherry-pick 53d8b313a35165626ac532f32b24c4ed139f3bdf  # incusd/dnsmasq: Treat unusable pid files as stale
+          git cherry-pick 1ae8b9e5fac6a7ce2e2cc63fdbf93902fe69782b  # tests: Cover empty dnsmasq pid files
+          git cherry-pick 507dd2998820c22c0c8e07998bb485bb0f1f4084  # shared/api: Add missing JSON and YAML tags
+          git cherry-pick 5333e79ab5409350dfb03be73ae762e8ee7681f0  # doc/rest-api: Refresh swagger YAML
+          git cherry-pick 92fc8d8d497e2bd3b83e0d8ca9c2952f1d8c216e  # incusd/instance: Check transaction error in instancePost
+          git cherry-pick 22d17e0a1eff5e2de1e274e0a1ea6f31fd10ecfb  # incusd/operations: Let the run function finish a cancelled operation
+          git cherry-pick 76e041042fa7bbc21fa9e062767c429b95e1824b  # incusd/instance/qemu: Allow live moves of VMs started by older versions
+
+          go build -o "/usr/incus/bin/fuidshift" github.com/lxc/incus/v7/cmd/fuidshift
+          go build -o "/usr/incus/bin/incus" github.com/lxc/incus/v7/cmd/incus
+          go build -o "/usr/incus/bin/incus-benchmark" github.com/lxc/incus/v7/cmd/incus-benchmark
+          go build -o "/usr/incus/bin/incus-migrate" github.com/lxc/incus/v7/cmd/incus-migrate
+          go build -o "/usr/incus/bin/incus-simplestreams" github.com/lxc/incus/v7/cmd/incus-simplestreams
+          go build -o "/usr/incus/bin/incus-user" github.com/lxc/incus/v7/cmd/incus-user
+          go build -o "/usr/incus/bin/incusd" -tags=libsqlite3 github.com/lxc/incus/v7/cmd/incusd
+          go build -o "/usr/incus/bin/lxc-to-incus" github.com/lxc/incus/v7/cmd/lxc-to-incus
+
+          PIDS=""
+          bg() {
+              "$@" &
+              PIDS="${PIDS} $!"
+          }
+
+          mkdir -p /usr/incus/agent
+          bg env GOARCH=amd64 GOOS=darwin CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.macos.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          bg env GOARCH=amd64 GOOS=freebsd CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.freebsd.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+          bg env GOARCH=386 GOOS=freebsd CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.freebsd.i686" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          bg env GOARCH=amd64 GOOS=netbsd CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.netbsd.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          bg env GOARCH=amd64 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+          bg env GOARCH=386 CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.linux.i686" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          bg env GOARCH=amd64 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.x86_64" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+          bg env GOARCH=386 GOOS=windows CGO_ENABLED=0 go build -o "/usr/incus/agent/incus-agent.windows.i686" -tags=agent,netgo github.com/lxc/incus/v7/cmd/incus-agent
+
+          for pid in ${PIDS}; do
+              wait "${pid}"
+          done
+
+          make build-mo
+          mkdir -p /usr/incus/share/locale
+          cp po/*.mo /usr/incus/share/locale/
+
+          #make doc
+          #cp -R doc/html /usr/incus/doc
+
+          mkdir -p /usr/incus/share/completions/
+          /usr/incus/bin/incus completion bash > /usr/incus/share/completions/bash
+          /usr/incus/bin/incus completion fish > /usr/incus/share/completions/fish
+          /usr/incus/bin/incus completion zsh > /usr/incus/share/completions/zsh
+
+      - name: Build UI (canonical)
+        run: |
+          REPO="${PWD}"
+
+          cd /build/incus-ui-canonical
+
+          # Complete re-branding.
+          find -type f -name "*.ts" -o -name "*.tsx" -o -name "*.scss" | xargs sed -i -f "${REPO}/patches/ui-canonical-renames.sed"
+
+          npm install -g --prefix /root/.local yarn
+          yarn install
+          yarn build
+
+          mkdir -p /usr/incus/ui-canonical/
+          rsync -a /build/incus-ui-canonical/build/ui/ /usr/incus/ui-canonical/
+
+      - name: Build Distrobuilder
+        run: |
+          cd /build/distrobuilder
+          go build -o "/usr/incus/bin/distrobuilder" github.com/lxc/distrobuilder/distrobuilder
+
+      - name: Build Incus Compose
+        run: |
+          cd /build/incus-compose
+          go build -ldflags="-w -s -X github.com/lxc/incus-compose/cmd/incus-compose/version.Version=${INCUS_COMPOSE_TAG}" -o "/usr/incus/bin/incus-compose" github.com/lxc/incus-compose/cmd/incus-compose
+
+      - name: Build CRIU
+        run: |
+          REPO="${PWD}"
+
+          cd /build/criu
+
+          make -j"$(nproc)" WERROR=0
+          cp criu/criu /usr/incus/bin/
+
+      - name: Build libnvidia-container
+        run: |
+          REPO="${PWD}"
+
+          cd /build/libnvidia-container
+          patch -p1 < "${REPO}/patches/nvidia-0001-Fix-for-22.04-build.patch"
+          patch -p1 < "${REPO}/patches/nvidia-0002-pre-load-libdl.patch"
+          make -j"$(nproc)" prefix=/
+
+          mkdir /build/target/libnvidia-container
+          DESTDIR=/build/target/libnvidia-container make install prefix=/
+          rsync -a /build/target/libnvidia-container/bin/ /usr/incus/bin/
+          rsync -a /build/target/libnvidia-container/include/ /usr/incus/include/
+          rsync -a /build/target/libnvidia-container/lib/ /usr/incus/lib/
+
+      - name: Build seabios
+        run: |
+          REPO="${PWD}"
+
+          cd /build/seabios
+
+          # Build a traditional seabios.
+          make clean distclean
+          echo "CONFIG_QEMU=y" > .config
+          echo "CONFIG_QEMU_HARDWARE=y" >> .config
+          echo "CONFIG_BOOTSPLASH=n" >> .config
+          echo "CONFIG_ROM_SIZE=256" >> .config
+          echo "CONFIG_XEN=n" >> .config
+          echo "CONFIG_PVSCSI=n" >> .config
+          echo "CONFIG_ESP_SCSI=n" >> .config
+          echo "CONFIG_LSI_SCSI=n" >> .config
+          echo "CONFIG_MEGASAS=n" >> .config
+          echo "CONFIG_MPT_SCSI=n" >> .config
+          echo "CONFIG_FLOPPY=n" >> .config
+          echo "CONFIG_FLASH_FLOPPY=n" >> .config
+          make oldnoconfig V=1
+          make -j"$(nproc)" V=1 PYTHON=python3
+
+          mkdir -p /usr/incus/share/qemu/
+          cp out/bios.bin /usr/incus/share/qemu/seabios.bin
+
+      - name: Build nasm
+        run: |
+          REPO="${PWD}"
+
+          cd /build/nasm
+          patch -p1 < "${REPO}/patches/nasm-0000-disable-manpages.patch"
+          ./configure --prefix=/usr/incus
+          make -j"$(nproc)"
+
+          mkdir -p /build/target/nasm/
+          DESTDIR=/build/target/nasm make install
+          rsync -a /build/target/nasm/usr/incus/bin/ /usr/incus/bin/
+
+      - name: Build EDK2
+        run: |
+          REPO="${PWD}"
+
+          cd /build/edk2
+          patch -p1 < "${REPO}/patches/edk2-0001-force-DUID-LLT.patch"
+          cp "${REPO}/patches/edk2-0002-logo.bmp" MdeModulePkg/Logo/Logo.bmp
+          patch -p1 < "${REPO}/patches/edk2-0003-boot-delay.patch"
+          patch -p1 < "${REPO}/patches/edk2-0004-gcc-errors.patch"
+          patch -p1 < "${REPO}/patches/edk2-0005-Revert-ArmVirtPkg-make-EFI_LOADER_DATA-non-executabl.patch"
+          patch -p1 < "${REPO}/patches/edk2-0006-disable-EFI-memory-attributes-protocol.patch"
+          patch -p1 < "${REPO}/patches/edk2-0007-OvmfPkg-X64-add-opt-org-tianocore-UninstallMemAttrProtocol-support.patch"
+          patch -p1 < "${REPO}/patches/edk2-0008-Disable-virtio-keyboard.patch"
+          patch -p1 < "${REPO}/patches/edk2-9999-disable-UEFI-shell-under-SecureBoot.patch"
+
+          sed -i "s#02/02/2022#$(date +%m/%d/%Y)#g" OvmfPkg/SmbiosPlatformDxe/SmbiosPlatformDxe.c
+
+          EDK2_ARCH="X64"
+          EDK2_PKG="OvmfPkg/OvmfPkgX64.dsc"
+          EDK2_FV_CODE="OVMF_CODE"
+          EDK2_FV_VARS="OVMF_VARS"
+
+          build_edk2() {
+              TARGET_CODE="$1"
+              shift
+              TARGET_VARS="$1"
+              shift
+
+              set -ex
+              (
+              cat << EOF
+                  . ./edksetup.sh
+                  make -C BaseTools ARCH=${EDK2_ARCH}
+                  build -a ${EDK2_ARCH} -t GCC -b RELEASE -p ${EDK2_PKG} \
+                    -DSMM_REQUIRE=TRUE \
+                    -DSECURE_BOOT_ENABLE=TRUE \
+                    -DNETWORK_IP4_ENABLE=TRUE \
+                    -DNETWORK_IP6_ENABLE=TRUE \
+                    -DNETWORK_TLS_ENABLE=TRUE \
+                    -DNETWORK_HTTP_BOOT_ENABLE=TRUE \
+                    -DTPM2_ENABLE=TRUE \
+                    -DTPM2_CONFIG_ENABLE=TRUE \
+                    --pcd PcdUninstallMemAttrProtocol=TRUE \
+                    $@
+          EOF
+              ) | bash -e
+
+              cp Build/*/*/FV/${EDK2_FV_CODE}.fd "${TARGET_CODE}"
+              cp Build/*/*/FV/${EDK2_FV_VARS}.fd "${TARGET_VARS}"
+          }
+
+          mkdir -p "/usr/incus/share/qemu/"
+          build_edk2 \
+            "/usr/incus/share/qemu/OVMF_CODE.4MB.fd" \
+            "/usr/incus/share/qemu/OVMF_VARS.4MB.fd" \
+            -DFD_SIZE_4MB
+
+          ln -s OVMF_CODE.4MB.fd /usr/incus/share/qemu/OVMF_CODE.fd
+          ln -s OVMF_VARS.4MB.fd /usr/incus/share/qemu/OVMF_VARS.fd
+
+          # Unified (embedded variable store) firmware for AMD SEV.
+          if [ "${EDK2_ARCH}" = "X64" ]; then
+              touch OvmfPkg/AmdSev/Grub/grub.efi
+
+              (
+              cat << EOF
+                  . ./edksetup.sh
+                  build -a X64 -t GCC -b RELEASE -p OvmfPkg/AmdSev/AmdSevX64.dsc \
+                    -DCC_MEASUREMENT_ENABLE=TRUE \
+                    -DNETWORK_IP4_ENABLE=TRUE \
+                    -DNETWORK_IP6_ENABLE=TRUE \
+                    -DNETWORK_TLS_ENABLE=TRUE \
+                    -DNETWORK_HTTP_BOOT_ENABLE=TRUE \
+                    -DTPM2_ENABLE=TRUE
+          EOF
+              ) | bash -e
+
+              cp Build/AmdSev/*/FV/OVMF.fd /usr/incus/share/qemu/OVMF.amdsev.fd
+          fi
+
+      - name: Build libtpms
+        run: |
+          REPO="${PWD}"
+
+          cd /build/libtpms
+          patch -p1 < "${REPO}/patches/libtpms-0001-Fix-a-compilation-error-in-TPMLIB_GetPlaintext.patch"
+
+          ./autogen.sh
+          ./configure --prefix=/usr/incus --with-tpm2 --with-openssl
+          make -j"$(nproc)"
+
+          mkdir -p /build/target/libtpms/
+          DESTDIR=/build/target/libtpms make install
+          rsync -a /build/target/libtpms/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/libtpms/usr/incus/lib/ /usr/incus/lib/
+
+      - name: Build swtpm
+        run: |
+          cd /build/swtpm
+          ./autogen.sh
+          ./configure --prefix=/usr/incus --with-gnutls --with-seccomp --with-openssl --without-cuse
+          make -j"$(nproc)"
+
+          mkdir -p /build/target/swtpm/
+          DESTDIR=/build/target/swtpm make install
+          rsync -a /build/target/swtpm/usr/incus/bin/ /usr/incus/bin/
+          rsync -a /build/target/swtpm/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/swtpm/usr/incus/lib/ /usr/incus/lib/
+
+          mkdir -p /usr/incus/etc/
+          cat > /usr/incus/etc/swtpm-localca.options << EOF
+          --platform-manufacturer Incus
+          --platform-version 2.1
+          --platform-model QEMU
+          EOF
+
+      - name: Build virtiofsd
+        run: |
+          cd /build/virtiofsd
+          cargo build --release
+          cp target/release/virtiofsd /usr/incus/bin/
+
+      - name: Build lego
+        run: |
+          cd /build/lego
+          go build -o "/usr/incus/bin/lego" github.com/go-acme/lego/v4/cmd/lego
+
+      - name: Build skopeo
+        run: |
+          cd /build/skopeo
+          go build -o "/usr/incus/bin/skopeo" ./cmd/skopeo
+
+      - name: Build TrueNAS Incus CTL
+        run: |
+          REPO="${PWD}"
+
+          cd /build/truenas_incus_ctl
+
+          patch -p1 < "${REPO}/patches/truenas-0001-bump-timeouts.patch"
+
+          go build -o "/usr/incus/bin/truenas_incus_ctl" truenas/truenas_incus_ctl
+
+      - name: Build virglrenderer
+        if: ${{ env.OS_NAME == 'debian-13' || env.OS_NAME == 'debian-14' }}
+        run: |
+          cd /build/virglrenderer
+
+          meson setup build \
+                  --prefix=/usr/incus \
+                  --libdir=/usr/incus/lib \
+                  -Dplatforms=egl \
+                  -Ddrm-renderers=amdgpu-experimental,asahi,msm,panfrost-experimental,i915-experimental
+          meson compile -C build
+
+          mkdir -p /build/target/virglrenderer/
+          DESTDIR=/build/target/virglrenderer/ meson install -C build
+          rsync -a /build/target/virglrenderer/usr/incus/include/ /usr/incus/include/
+          rsync -a /build/target/virglrenderer/usr/incus/lib/ /usr/incus/lib/
+
+      - name: Build QEMU
+        run: |
+          REPO="${PWD}"
+
+          cd /build/qemu
+
+          patch -p1 < "${REPO}/patches/qemu-0001-fdmon-io_uring-avoid-idle-event-loop-being-accounted.patch"
+
+          sed -i "s/^unset target_list$/target_list=\"x86_64-softmmu\"/" configure
+
+          sed -i "/subdir('tests')/d" meson.build
+
+          opengl=""
+          if [ "${OS_NAME}" = "debian-13" ] || [ "${OS_NAME}" = "debian-14" ]; then
+            opengl="--enable-opengl --enable-virglrenderer"
+          fi
+
+          ./configure \
+                  --prefix=/usr/incus \
+                  --libexecdir=bin \
+                  --libdir=lib \
+                  --disable-bochs \
+                  --disable-cloop \
+                  --disable-dmg \
+                  --disable-docs  \
+                  --disable-fuse  \
+                  --disable-guest-agent \
+                  --disable-parallels \
+                  --disable-qed \
+                  --disable-slirp \
+                  --disable-user \
+                  --disable-vdi \
+                  --disable-vnc \
+                  --disable-xen \
+                  --disable-install-blobs \
+                  --enable-attr \
+                  --enable-cap-ng \
+                  --enable-kvm \
+                  --enable-libusb \
+                  --enable-usb-redir \
+                  --enable-linux-aio \
+                  --enable-linux-io-uring \
+                  --enable-numa \
+                  --enable-pie \
+                  --enable-png \
+                  --enable-rbd \
+                  --enable-seccomp \
+                  --enable-spice \
+                  --enable-system \
+                  --enable-tcg \
+                  --enable-tools \
+                  --enable-vhost-crypto \
+                  --enable-vhost-kernel \
+                  --enable-vhost-net \
+                  --enable-vhost-user \
+                  --enable-virtfs \
+                  ${opengl}
+          make -j"$(nproc)"
+
+          mkdir /build/target/qemu/
+          DESTDIR=/build/target/qemu/ make install
+          rsync -a /build/target/qemu/usr/incus/bin/ /usr/incus/bin/
+          rsync -a /build/target/qemu/usr/incus/lib/ /usr/incus/lib/
+          rsync -a /build/target/qemu/usr/incus/share/qemu/ /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/kvmvapic.bin /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/vgabios-qxl.bin /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/vgabios-virtio.bin /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/efi-e1000e.rom /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/efi-virtio.rom /usr/incus/share/qemu/
+          cp /build/qemu/pc-bios/efi-vmxnet3.rom /usr/incus/share/qemu/
+
+      - name: Build Secure Boot firmware
+        run: |
+          REPO="${PWD}"
+
+          cd /build/edk2
+
+          FIRMWARE="OVMF"
+
+          cd "${REPO}/edk2-vars-generator"
+          ./edk2-vars-generator -f "${FIRMWARE}" \
+            -e /build/edk2/Build/*/*/*/EnrollDefaultKeys.efi \
+            -s /build/edk2/Build/*/*/*/Shell.efi \
+            -c "/usr/incus/share/qemu/OVMF_CODE.4MB.fd" \
+            -V "/usr/incus/share/qemu/OVMF_VARS.4MB.fd" \
+            -C "$(cat ${REPO}/zabbly-sb.oem.crt)" \
+            -o "/usr/incus/share/qemu/OVMF_VARS.4MB.ms.fd"
+
+      - name: Strip and cleanup binaries
+        run: |
+          rm -Rf /usr/incus/lib/debug/
+          rm -Rf /usr/incus/include/
+          rm -Rf /usr/incus/lib/pkgconfig/
+          rm /usr/incus/lib/*.a /usr/incus/lib/*.la /usr/incus/lib/*/*.a /usr/incus/lib/*/*.la
+
+          rm /usr/incus/bin/nasm
+          rm /usr/incus/bin/ndisasm
+          rm /usr/incus/bin/qemu-bridge-helper
+          rm /usr/incus/bin/qemu-edid
+          rm /usr/incus/bin/qemu-io
+          rm /usr/incus/bin/qemu-pr-helper
+          rm /usr/incus/bin/qemu-storage-daemon
+          rm /usr/incus/share/qemu/trace-events-all
+
+          strip /usr/incus/agent/*linux*
+          strip /usr/incus/bin/*
+          strip /usr/incus/lib/*so*
+
+      - name: Make a Debian package
+        env:
+          PKGOS: "debian-14"
+        run: |
+          [ "${PKGOS}" = "debian-12" ] && CODENAME=bookworm
+          [ "${PKGOS}" = "debian-13" ] && CODENAME=trixie
+          [ "${PKGOS}" = "debian-14" ] && CODENAME=forky
+          [ "${PKGOS}" = "ubuntu-22.04" ] && CODENAME=jammy
+          [ "${PKGOS}" = "ubuntu-24.04" ] && CODENAME=noble
+          [ "${PKGOS}" = "ubuntu-26.04" ] && CODENAME=resolute
+
+          mkdir -p \
+            pkg/ \
+            pkg/etc \
+            pkg/lib/systemd/system/ \
+            pkg/usr/ \
+            pkg/usr/bin/ \
+            pkg/usr/lib/sysctl.d/ \
+            pkg/usr/share/bash-completion/completions/ \
+            pkg/usr/share/fish/vendor_completions.d/ \
+            pkg/usr/share/zsh/vendor-completions/
+
+          cp -R debian pkg/debian
+          cp -R bin/* pkg/usr/bin/
+          cp -R /usr/incus pkg/usr/
+          cp -R etc/* pkg/etc/
+
+          cp -R systemd/system/* pkg/lib/systemd/system/
+          cp -R systemd/wrappers/* pkg/usr/incus/lib/systemd/
+          cp -R systemd/sysctl.d/* pkg/usr/lib/sysctl.d/
+
+          ln -s /usr/incus/share/completions/bash pkg/usr/share/bash-completion/completions/incus
+          ln -s /usr/incus/share/completions/fish pkg/usr/share/fish/vendor_completions.d/incus.fish
+          ln -s /usr/incus/share/completions/zsh pkg/usr/share/zsh/vendor-completions/_incus
+
+          ln -s /usr/incus/bin/fuidshift pkg/usr/bin/fuidshift
+          ln -s /usr/incus/bin/incus-simplestreams pkg/usr/bin/incus-simplestreams
+          ln -s /usr/incus/bin/incus-benchmark pkg/usr/bin/incus-benchmark
+
+          mkdir -p pkg/var/lib/incus
+          chmod 711 pkg/var/lib/incus
+
+          mkdir -p pkg/var/log/incus
+          chmod 700 pkg/var/log/incus
+
+          mkdir -p pkg/usr/share/locale
+          for i in /usr/incus/share/locale/*.mo; do
+            LANG=$(echo $i | sed -e "s#.*/locale/##g" -e "s#.mo\$##g")
+            mkdir -p pkg/usr/share/locale/${LANG}/LC_MESSAGES
+            ln -s ${i} pkg/usr/share/locale/${LANG}/LC_MESSAGES/incus.mo
+          done
+
+          cd pkg
+
+          if [ "${PKGOS}" = "debian-13" ] || [ "${PKGOS}" = "ubuntu-24.04" ] || [ "${PKGOS}" = "debian-14" ]; then
+            sed -i debian/control \
+              -e "s/LIBPNG16/libpng16-16t64/g" \
+              -e "s/LIBUSBREDIRPARSER1/libusbredirparser1t64/g" \
+              -e "s/LIBAIO1/libaio1t64/g" \
+              -e "s/LIBBTRFS0/libbtrfs0t64/g" \
+              -e "s/LIBUV1/libuv1t64/g"
+
+            if [ "${PKGOS}" = "debian-14" ]; then
+              sed -i debian/control \
+                -e "s/LIBGPGME11/libgpgme45/g"
+            else
+              sed -i debian/control \
+                -e "s/LIBGPGME11/libgpgme11t64/g"
+            fi
+          else
+            sed -i debian/control \
+              -e "s/LIBPNG16/libpng16-16/g" \
+              -e "s/LIBUSBREDIRPARSER1/libusbredirparser1/g" \
+              -e "s/LIBAIO1/libaio1/g" \
+              -e "s/LIBBTRFS0/libbtrfs0/g" \
+              -e "s/LIBGPGME11/libgpgme11/g" \
+              -e "s/LIBUV1/libuv1/g"
+          fi
+
+          if [ "${PKGOS}" = "debian-13" ] || [ "${PKGOS}" = "debian-14" ]; then
+            sed -i debian/control \
+              -e "s/LIBFUSE3/libfuse3-4/g"
+          else
+            sed -i debian/control \
+              -e "s/LIBFUSE3/libfuse3-3/g"
+          fi
+
+          if [ "${PKGOS}" = "debian-14" ]; then
+            sed -i debian/control \
+              -e "s/LIBNET1/libnet9/g"
+          else
+            sed -i debian/control \
+              -e "s/LIBNET1/libnet1/g"
+          fi
+
+          if [ "${PKGOS}" = "debian-13" ] || [ "${PKGOS}" = "debian-14" ]; then
+            sed -i debian/control \
+              -e "s/^  LIBVIRGL,$/  libdrm-amdgpu1,\n  libdrm2,\n  libegl1,\n  libepoxy0,\n  libgbm1,/"
+            echo "usr/incus/lib/libvirglrenderer.so*" >> debian/incus.install
+          else
+            sed -i debian/control \
+              -e "/^  LIBVIRGL,$/d"
+          fi
+
+          dch --package incus --create -D ${CODENAME} -M -m "Automated Incus stable build" -v 1:$(echo ${INCUS_TAG} | sed -e "s/v//" -e "s/.0$//")-$(echo ${PKGOS} | sed "s/-//g")-$(date -u +%Y%m%d%H%M)~deb14 --force-distribution
+          dpkg-buildpackage -b
+
+          cd ..
+          mkdir out
+          mv incus_* out/
+          mv incus-base_* out/
+          mv incus-client_* out/
+          mv incus-extra_* out/
+          mv incus-ui-canonical_* out/
+
+      - name: Upload resulting build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: debian-forky-amd64
+          path: out/*
+
   release:
     if: github.repository == 'frostyard/incus' && github.ref == 'refs/heads/stable'
     runs-on: ubuntu-latest
@@ -946,10 +1862,10 @@ jobs:
           name: debian-trixie-amd64
           path: ./dist
 
-      # apt-publisher publishes every .deb in the release, and it is
-      # registered for trixie only, in the image component. The release must
-      # therefore hold exactly one complete Debian 13 amd64 build, and
-      # nothing else.
+      # apt-publisher publishes every .deb in the release to the codenames
+      # the request names, in the image component, and this Debian 13 version
+      # carries no ~deb13 marker. The release must therefore hold exactly one
+      # complete Debian 13 amd64 build, and nothing else.
       - name: Check the packages
         id: check
         run: |
@@ -1028,3 +1944,113 @@ jobs:
           repository: frostyard/apt-publisher
           event-type: publish-deb
           client-payload: '{"repo": "${{ github.repository }}", "tag": "${{ needs.release.outputs.tag }}", "codenames": ["trixie"]}'
+
+  # The Debian 14 (forky) release: separate from release so that a forky
+  # failure never blocks the trixie release.
+  release-forky:
+    if: github.repository == 'frostyard/incus' && github.ref == 'refs/heads/stable'
+    runs-on: ubuntu-latest
+    needs: build-incus-forky
+    timeout-minutes: 20
+    permissions:
+      contents: write # create the release and its tag
+      attestations: write # store the build provenance attestations
+      id-token: write # sign the attestations with this workflow's identity
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: debian-forky-amd64
+          path: ./dist
+
+      # apt-publisher publishes every .deb in the release, and it publishes a
+      # ~deb14 version to forky only. The release must therefore hold exactly
+      # one complete Debian 14 amd64 build, and nothing else.
+      - name: Check the packages
+        id: check
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          want="incus incus-base incus-client incus-extra incus-ui-canonical"
+          version="" names=()
+          for deb in dist/*.deb; do
+            name=$(dpkg-deb -f "$deb" Package)
+            arch=$(dpkg-deb -f "$deb" Architecture)
+            v=$(dpkg-deb -f "$deb" Version)
+            size=$(stat -c %s "$deb")
+            if [[ $arch != amd64 ]]; then
+              echo "::error::$deb is built for $arch, not amd64"
+              exit 1
+            fi
+            if [[ ! $v =~ ^1:[0-9][0-9.]*-debian14-[0-9]{12}~deb14$ ]]; then
+              echo "::error::$deb has version $v, which is not a Debian 14 build"
+              exit 1
+            fi
+            if [[ -n $version && $v != "$version" ]]; then
+              echo "::error::$deb has version $v, but another package has $version"
+              exit 1
+            fi
+            if ((size >= 2147483648)); then
+              echo "::error::$deb is $size bytes; GitHub release assets must be under 2 GiB"
+              exit 1
+            fi
+            version=$v
+            names+=("$name")
+          done
+          got=$(printf '%s\n' "${names[@]}" | sort | paste -sd ' ')
+          if [[ $got != "$want" ]]; then
+            echo "::error::expected the packages: $want; found: ${got:-none}"
+            exit 1
+          fi
+          # A git tag cannot contain ~, so the tag is the version without its
+          # epoch and without the ~deb14 suffix, for example
+          # 7.6-debian14-202611131200.
+          v=${version#1:}
+          echo "tag=${v%~deb14}" >>"$GITHUB_OUTPUT"
+
+      # Binds each .deb to this workflow run. Verify with
+      # gh attestation verify FILE --repo frostyard/incus --source-ref refs/heads/stable
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.deb
+
+      # --latest=false: the trixie release stays the latest, because trixie
+      # stays the default codename.
+      # gh uploads the assets to a draft and publishes it once all are
+      # attached, so apt-publisher never sees a partial release. An existing
+      # tag fails this step instead of changing a published release.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/*.deb --target "$GITHUB_SHA" --latest=false \
+            --title "Incus $TAG" \
+            --notes "Debian 14 (forky) amd64 build of stable at $GITHUB_SHA. frostyard/apt-publisher publishes it to https://repository.frostyard.org/debian/ (forky, component image)."
+
+  # Not continue-on-error: if the request fails, nothing was published and
+  # the run must fail. Re-running this job alone requests the same release
+  # again. codenames names forky explicitly because the trixie version
+  # carries no ~deb13 marker; the forky version's ~deb14 marker is what
+  # publishes it to forky alone. The payload names no component:
+  # apt-publisher puts this repository's packages in the component it is
+  # registered for, image (core ADR-0059).
+  request-publication-forky:
+    runs-on: ubuntu-latest
+    needs: release-forky
+    timeout-minutes: 5
+    permissions: {}
+
+    steps:
+      - name: Request APT publication
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4
+        with:
+          token: ${{ secrets.APT_PUBLISH_TOKEN }}
+          repository: frostyard/apt-publisher
+          event-type: publish-deb
+          client-payload: '{"repo": "${{ github.repository }}", "tag": "${{ needs.release-forky.outputs.tag }}", "codenames": ["forky"]}'

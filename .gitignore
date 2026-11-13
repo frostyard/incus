@@ -1,0 +1,3 @@
+# Python bytecode from the generator tests (tests/test_sync_docker_build.py).
+__pycache__/
+*.pyc
