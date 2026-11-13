@@ -1,0 +1,29 @@
+# Tests for sync-docker-build.py and for the release package checks it emits.
+# Build (Docker) regenerates builds-docker.yml from this repository's
+# builds.yml, so an upstream sync that changes builds.yml must still satisfy
+# every rewrite the generator derives the Debian 14 (forky) build with, and
+# each release job must accept a correct build and reject a wrong one. The
+# tests are standard-library Python only and run in seconds.
+name: Generator
+
+on:
+  pull_request:
+  push:
+    branches: [stable]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Generator tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Run the generator tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v

@@ -2,6 +2,8 @@
 """
 Generate builds-docker.yml from builds.yml.
 
+Tests: tests/test_sync_docker_build.py
+
 Transforms the upstream multi-arch matrix build workflow into amd64 builds
 for Debian Trixie (13) and Debian Forky (14), each running in a Docker
 container on standard GitHub-hosted runners. Builds of stable are then
