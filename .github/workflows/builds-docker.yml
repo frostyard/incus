@@ -1055,6 +1055,7 @@ jobs:
             python3-tomli \
             python3-venv \
             python3-yaml \
+            rpcsvc-proto \
             rsync \
             socat \
             uuid-dev \

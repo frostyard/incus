@@ -351,6 +351,7 @@ def strip_sudo(line):
 def _transform_install_deps(lines, target):
     """Add awscli and jq packages, use --break-system-packages first."""
     result = []
+    rpcgen_added = False
     for line in lines:
         result.append(line)
         # Insert awscli after automake (alphabetical order)
@@ -367,6 +368,17 @@ def _transform_install_deps(lines, target):
         if re.match(r'\s+python3-venv \\\s*$', line):
             indent = line[:len(line) - len(line.lstrip())]
             result.append(f'{indent}python3-yaml \\')
+            # Insert rpcsvc-proto after it for forky: libnvidia-container
+            # runs rpcgen. In trixie, libc6-dev depends on rpcsvc-proto, which
+            # ships rpcgen; in forky it no longer does.
+            if target['forky']:
+                result.append(f'{indent}rpcsvc-proto \\')
+                rpcgen_added = True
+
+    if target['forky'] and not rpcgen_added:
+        sys.exit('error: builds.yml has no `python3-venv \\` line in the '
+                 '`Install dependencies` step, so the Debian 14 (forky) build '
+                 'cannot add rpcsvc-proto (rpcgen). Update sync-docker-build.py.')
 
     # Swap pip install order: try --break-system-packages first (Trixie needs it)
     final = []
