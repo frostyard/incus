@@ -9,6 +9,11 @@ updates:
     exclude-paths:
       - ".github/workflows/builds.yml"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     commit-message:
       prefix: "ci"
+    # 1 group, so all action updates come in 1 PR a month (frostyard/core
+    # ADR-0075 and ADR-0089). Security updates stay 1 PR each.
+    groups:
+      actions:
+        patterns: ["*"]
